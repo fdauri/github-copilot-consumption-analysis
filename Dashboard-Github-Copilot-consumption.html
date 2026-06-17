@@ -171,6 +171,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .quota-split .qs-n.ent { color:#7c3aed; }
 .quota-split .qs-bar-biz { background:var(--cp-link); }
 .quota-split .qs-bar-ent { background:#7c3aed; }
+.lic-input-card { display:flex; flex-direction:column; gap:6px; }
+.lic-input-head { display:flex; flex-direction:column; gap:2px; }
+.lic-input-head b { font-size:14px; font-weight:600; color:var(--cp-text); }
+.lic-input-head span { font-size:12px; color:var(--cp-text-muted); }
+.lic-input-fields { display:flex; flex-wrap:wrap; gap:18px; align-items:center; margin-top:6px; }
+.lic-input-fields label { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--cp-text); }
+.lic-input-fields .num-field input { width:64px; }
+.lic-reset { padding:6px 12px; border-radius:9px; font-weight:600; font-size:12px; border:1px solid var(--cp-border); background:var(--cp-surface); color:var(--cp-text-muted); cursor:pointer; }
+.lic-reset:hover { border-color:var(--cp-border-strong); color:var(--cp-text); }
 .topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
 .controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 .switch-wrap { display:inline-flex; align-items:center; gap:10px; cursor:pointer; user-select:none; background:var(--cp-surface); border:1px solid var(--cp-border); border-radius:12px; padding:8px 14px; box-shadow:0 0 2px rgba(0,0,0,0.12),0 1px 2px rgba(0,0,0,0.14); }
@@ -259,6 +268,8 @@ const state = {
   numLocale: 'en-US', // formato numerico dei valori in $ ('en-US' o 'it-IT')
   promo: false,       // promozione Giu-Ago: crediti omaggio per licenza
   spendFactor: 1,     // <1 quando la promo riduce la spesa
+  licBiz: null,       // override n. licenze Business (null = usa il conteggio attivo dal CSV)
+  licEnt: null,       // override n. licenze Enterprise (null = usa il conteggio attivo dal CSV)
   sort: { model: {col:'cost', dir:'desc'}, user: {col:'cost', dir:'desc'}, cc: {col:'cost', dir:'desc'} }
 };
 
@@ -333,8 +344,13 @@ const T = {
     seg_over:cr=>`+${cr} oltre il pool`, seg_consumed:cr=>`Consumati ${cr}`, seg_free:cr=>`${cr} liberi`,
     foot_over:(cr,p,u)=>`Eccedenza: <b>+${cr} cr (+${p}%) \u00b7 ${u} extra</b>`,
     foot_margin:cr=>`Margine residuo: <b>${cr} cr</b>`,
-    pool_sub:(n,b,qb,e,qe,cv)=>`Pool = somma delle quote mensili di ${n} utenti attivi (${b} Business \u00d7 ${qb} + ${e} Enterprise \u00d7 ${qe} crediti). 1 credito = ${cv}.`,
-    of_active_users:n=>`su ${n} utenti attivi`
+    pool_sub:(n,b,qb,e,qe,cv)=>`Pool = somma delle quote mensili di ${n} licenze nel pool (${b} Business \u00d7 ${qb} + ${e} Enterprise \u00d7 ${qe} crediti). 1 credito = ${cv}.`,
+    of_active_users:n=>`su ${n} utenti attivi`,
+    lic_input_title:'Licenze totali del pool',
+    lic_input_hint:'Valori rilevati dagli utenti attivi nel CSV. Modificali per includere licenze GitHub Copilot non attive nel periodo: i loro crediti ampliano il pool condiviso.',
+    lic_biz_label:'Licenze Business',
+    lic_ent_label:'Licenze Enterprise',
+    lic_reset:'Ripristina dai dati'
   },
   en: {
     intro:'Upload one or more <code>AIUsageReport_*.csv</code> with the columns <code>date, username, model, quantity, gross_amount, cost_center_name…</code>. The analysis runs entirely in your browser, no data is uploaded online.',
@@ -383,8 +399,13 @@ const T = {
     seg_over:cr=>`+${cr} beyond the pool`, seg_consumed:cr=>`Consumed ${cr}`, seg_free:cr=>`${cr} free`,
     foot_over:(cr,p,u)=>`Overage: <b>+${cr} cr (+${p}%) \u00b7 ${u} extra</b>`,
     foot_margin:cr=>`Remaining margin: <b>${cr} cr</b>`,
-    pool_sub:(n,b,qb,e,qe,cv)=>`Pool = sum of the monthly quotas of ${n} active users (${b} Business \u00d7 ${qb} + ${e} Enterprise \u00d7 ${qe} credits). 1 credit = ${cv}.`,
-    of_active_users:n=>`of ${n} active users`
+    pool_sub:(n,b,qb,e,qe,cv)=>`Pool = sum of the monthly quotas of ${n} licenses in the pool (${b} Business \u00d7 ${qb} + ${e} Enterprise \u00d7 ${qe} credits). 1 credit = ${cv}.`,
+    of_active_users:n=>`of ${n} active users`,
+    lic_input_title:'Total pool licenses',
+    lic_input_hint:'Values detected from active users in the CSV. Edit them to include GitHub Copilot licenses that were inactive during the period: their credits expand the shared pool.',
+    lic_biz_label:'Business licenses',
+    lic_ent_label:'Enterprise licenses',
+    lic_reset:'Reset from data'
   }
 };
 const L = () => T[state.lang];
@@ -654,8 +675,8 @@ function aggregate(rows){
     .sort((a,b) => b.gross_amount - a.gross_amount);
 
   // ---- Pool di AI credits (base + variante promo Giu-Ago) ----
-  const pool = computePool(byUser);
-  const poolPromo = computePool(byUser, 1100, 3100);
+  const pool = computePool(byUser, 0, 0, state.licBiz, state.licEnt);
+  const poolPromo = computePool(byUser, 1100, 3100, state.licBiz, state.licEnt);
 
   return {
     summary: {
@@ -681,7 +702,9 @@ function aggregate(rows){
 }
 
 // Calcola il pool di AI credits a partire dalle quote mensili per utente.
-function computePool(byUser, bonusBiz=0, bonusEnt=0){
+// targetBiz / targetEnt: numero totale di licenze impostato dall'utente. Se superiore
+// agli utenti attivi rilevati, le licenze inattive aggiungono i loro crediti al pool condiviso.
+function computePool(byUser, bonusBiz=0, bonusEnt=0, targetBiz=null, targetEnt=null){
   const CREDIT_VALUE = 0.01;
   const licOf = q => q >= 3900 ? 'Enterprise' : 'Business';
   const usersWithQuota = [...byUser.entries()].filter(([, v]) => v.quota > 0);
@@ -703,6 +726,24 @@ function computePool(byUser, bonusBiz=0, bonusEnt=0){
       quota, consumed: round(cons,4), excess: round(excess,4)
     });
   }
+
+  // Licenze attive rilevate dal CSV e quota media per licenza (include il bonus promo se attivo)
+  const nBizActive = nBiz, nEntActive = nEnt;
+  const quotaBizEach = nBiz ? bizPool / nBiz : (1900 + bonusBiz);
+  const quotaEntEach = nEnt ? entPool / nEnt : (3900 + bonusEnt);
+  // Licenze inattive impostate dall'utente: non consumano nulla ma la loro quota
+  // amplia il pool/surplus condiviso disponibile per gli altri.
+  const extraBiz = targetBiz != null ? Math.max(0, Math.round(targetBiz) - nBizActive) : 0;
+  const extraEnt = targetEnt != null ? Math.max(0, Math.round(targetEnt) - nEntActive) : 0;
+  if (extraBiz > 0) {
+    const add = extraBiz * quotaBizEach;
+    poolCredits += add; bizPool += add; totalSurplus += add; nBiz += extraBiz;
+  }
+  if (extraEnt > 0) {
+    const add = extraEnt * quotaEntEach;
+    poolCredits += add; entPool += add; totalSurplus += add; nEnt += extraEnt;
+  }
+
   const overageCredits = Math.max(0, consumedCredits - poolCredits);
   const coveredByPool = Math.min(totalExcess, totalSurplus);
   overRows.forEach(r => {
@@ -727,6 +768,7 @@ function computePool(byUser, bonusBiz=0, bonusEnt=0){
     n_users: usersWithQuota.length, n_overusers: overRows.length,
     n_underusers: usersWithQuota.length - overRows.length,
     n_business: nBiz, n_enterprise: nEnt,
+    n_business_active: nBizActive, n_enterprise_active: nEntActive,
     by_license: [
       { license:'Business', count:nBiz, quota_each: nBiz ? Math.round(bizPool/nBiz) : 1900, pool_credits: bizPool },
       { license:'Enterprise', count:nEnt, quota_each: nEnt ? Math.round(entPool/nEnt) : 3900, pool_credits: entPool }
@@ -848,6 +890,18 @@ function rebuildDashboard(){
     <div class="section-head">
       <h2>${t('pool_section_title')}</h2>
       <p id="pool-sub"></p>
+    </div>
+
+    <div class="card lic-input-card">
+      <div class="lic-input-head">
+        <b>${t('lic_input_title')}</b>
+        <span>${t('lic_input_hint')}</span>
+      </div>
+      <div class="lic-input-fields">
+        <label>${t('lic_biz_label')} <span class="num-field"><input type="number" id="lic-input-biz" min="0" step="1" inputmode="numeric"></span></label>
+        <label>${t('lic_ent_label')} <span class="num-field"><input type="number" id="lic-input-ent" min="0" step="1" inputmode="numeric"></span></label>
+        <button type="button" id="lic-reset" class="lic-reset">${t('lic_reset')}</button>
+      </div>
     </div>
 
     <div class="kpis">
@@ -1061,6 +1115,29 @@ function renderCCTable(agg, rowsOverride){
 function renderPool(P, C){
   if (!P) return;
 
+  // Input numero licenze: default = licenze attive dal CSV, modificabili per includere licenze inattive
+  const bizIn = $('#lic-input-biz'), entIn = $('#lic-input-ent');
+  if (bizIn && entIn) {
+    if (state.licBiz != null && state.licBiz < P.n_business_active) state.licBiz = null;
+    if (state.licEnt != null && state.licEnt < P.n_enterprise_active) state.licEnt = null;
+    bizIn.min = P.n_business_active;
+    entIn.min = P.n_enterprise_active;
+    bizIn.value = state.licBiz != null ? state.licBiz : P.n_business_active;
+    entIn.value = state.licEnt != null ? state.licEnt : P.n_enterprise_active;
+    bizIn.onchange = () => {
+      let v = parseInt(bizIn.value, 10);
+      if (!Number.isFinite(v) || v < P.n_business_active) v = P.n_business_active;
+      state.licBiz = v; rebuildDashboard();
+    };
+    entIn.onchange = () => {
+      let v = parseInt(entIn.value, 10);
+      if (!Number.isFinite(v) || v < P.n_enterprise_active) v = P.n_enterprise_active;
+      state.licEnt = v; rebuildDashboard();
+    };
+    const reset = $('#lic-reset');
+    if (reset) reset.onclick = () => { state.licBiz = null; state.licEnt = null; rebuildDashboard(); };
+  }
+
   $('#lic-biz').textContent = fmtInt(P.n_business);
   $('#lic-ent').textContent = fmtInt(P.n_enterprise);
   const totLic = (P.n_business + P.n_enterprise) || 1;
@@ -1068,7 +1145,7 @@ function renderPool(P, C){
   $('#lic-bar-ent').style.width = (P.n_enterprise / totLic * 100) + '%';
 
   document.querySelector('#pool-sub').textContent =
-    L().pool_sub(fmtInt(P.n_users), fmtInt(P.n_business), fmtInt(P.by_license[0].quota_each), fmtInt(P.n_enterprise), fmtInt(P.by_license[1].quota_each), fmtUSD(P.credit_value));
+    L().pool_sub(fmtInt(P.n_business + P.n_enterprise), fmtInt(P.n_business), fmtInt(P.by_license[0].quota_each), fmtInt(P.n_enterprise), fmtInt(P.by_license[1].quota_each), fmtUSD(P.credit_value));
 
   $('#pool-kpi-pool').textContent = fmtUSD(P.pool_usd);
   $('#pool-kpi-pool-sub').textContent = fmtCr(P.pool_credits) + ' ' + t('available_credits');
