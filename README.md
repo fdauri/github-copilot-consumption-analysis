@@ -83,3 +83,43 @@ Activated automatically when quota data is present in the CSV.
 ## Privacy
 
 All CSV parsing and computation runs entirely in the browser using [PapaParse](https://www.papaparse.com/) and [Chart.js](https://www.chartjs.org/) loaded from CDN. **No data is ever sent to any server.**
+
+---
+
+## Disclaimer
+
+This project is an **independent, community-contributed open-source tool**. It is **not** affiliated with, endorsed by, sponsored by, or in any way connected to **GitHub, Inc.** or **Microsoft Corporation**. The GitHub Copilot name and related trademarks are the property of their respective owners and are used here solely for descriptive purposes.
+
+The software is provided **"as is"**, without warranty of any kind, express or implied. The authors and contributors accept no responsibility for errors, omissions, or inaccuracies in the data displayed or computed by this tool. **It is the sole responsibility of the user to verify the accuracy and completeness of any data analysed through this dashboard** before making any business, financial, or operational decisions based on it.
+
+---
+
+## License
+
+This project is released under the **[MIT License](https://opensource.org/licenses/MIT)**.
+
+```
+MIT License
+
+Copyright (c) 2026 contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+> **Why MIT?** The tool is a single self-contained file with no server component and no proprietary dependencies. MIT is the most permissive and widely recognised licence for this kind of utility: it allows anyone to freely use, copy, modify, and redistribute the code — including in commercial contexts — while keeping the liability disclaimer that reflects the "as-is" nature of the project.
