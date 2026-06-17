@@ -1,0 +1,1192 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GitHub Copilot — AI Credits Dashboard (Uploader)</title>
+<script>
+  (() => {
+    const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+    const theme = param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --cp-bg: #f7f4ef; --cp-bg-elevated: #fcfbf8; --cp-surface: #ffffff; --cp-surface-soft: #f5f5f5;
+  --cp-border: #dedede; --cp-border-strong: #919191; --cp-text: #242424; --cp-text-muted: #5c5c5c;
+  --cp-text-soft: #6f6f6f; --cp-accent: #b11f4b; --cp-accent-hover: #9a1a41;
+  --cp-accent-soft: rgba(177, 31, 75, 0.08); --cp-accent-fg: #ffffff;
+  --cp-success: #16a34a; --cp-danger: #dc2626; --cp-warning: #f59e0b; --cp-link: #0078d4;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --cp-bg: #3d3b3a; --cp-bg-elevated: #343231; --cp-surface: #292929; --cp-surface-soft: #2e2e2e;
+  --cp-border: #474747; --cp-border-strong: #5f5f5f; --cp-text: #dedede; --cp-text-muted: #919191;
+  --cp-text-soft: #b0b0b0; --cp-accent: #fd8ea1; --cp-accent-hover: #fb7b91;
+  --cp-accent-soft: rgba(253, 142, 161, 0.14); --cp-accent-fg: #1a1a1a;
+  --cp-success: #4ade80; --cp-danger: #f87171; --cp-warning: #fbbf24; --cp-link: #4da6ff;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 24px;
+  font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--cp-bg); color: var(--cp-text);
+}
+header { max-width: 1400px; margin: 0 auto 16px; }
+header h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+header p { margin: 0; color: var(--cp-text-muted); font-size: 13px; }
+.wrap { max-width: 1400px; margin: 0 auto; display: grid; gap: 16px; }
+
+.card {
+  background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 16px;
+  padding: 16px 18px; box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14);
+}
+
+/* Dropzone */
+.drop {
+  display: block;
+  border: 2px dashed var(--cp-border-strong); border-radius: 16px; padding: 28px;
+  text-align: center; background: var(--cp-bg-elevated); transition: all .15s ease;
+  cursor: pointer;
+}
+.drop.drag { border-color: var(--cp-accent); background: var(--cp-accent-soft); }
+.drop h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.drop p { margin: 0; color: var(--cp-text-muted); font-size: 13px; }
+.drop .btn {
+  display: inline-block; margin-top: 12px; padding: 8px 18px; border-radius: 10px;
+  background: var(--cp-accent); color: var(--cp-accent-fg); font-weight: 600; font-size: 13px;
+  border: 0; cursor: pointer;
+}
+.drop .btn:hover { background: var(--cp-accent-hover); }
+.drop input[type=file] { display: none; }
+
+.files {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; justify-content: center;
+}
+.file-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px 4px 12px; border-radius: 999px;
+  background: var(--cp-surface-soft); border: 1px solid var(--cp-border);
+  font-size: 12px; color: var(--cp-text);
+}
+.file-chip button {
+  background: transparent; border: 0; color: var(--cp-text-muted); cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 2px 4px; border-radius: 4px;
+}
+.file-chip button:hover { color: var(--cp-danger); background: var(--cp-surface); }
+.file-chip.error { border-color: var(--cp-danger); color: var(--cp-danger); }
+
+.actions { display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+.actions button {
+  padding: 8px 16px; border-radius: 10px; font-weight: 600; font-size: 13px;
+  border: 1px solid var(--cp-border); background: var(--cp-surface); color: var(--cp-text);
+  cursor: pointer;
+}
+.actions button:hover { border-color: var(--cp-border-strong); }
+.actions button.danger:hover { color: var(--cp-danger); border-color: var(--cp-danger); }
+
+/* Dashboard area */
+#dashboard { display: none; grid-gap: 16px; }
+#dashboard.visible { display: grid; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.kpi .label { font-size: 12px; color: var(--cp-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.kpi .value { font-size: 26px; font-weight: 600; margin-top: 6px; color: var(--cp-text); }
+.kpi .sub { font-size: 12px; color: var(--cp-text-soft); margin-top: 2px; }
+.grid-2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+.grid-2 > .card { min-width: 0; }
+@media (max-width: 980px) { .grid-2 { grid-template-columns: 1fr; } }
+.card h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: var(--cp-text); letter-spacing: .02em; }
+.chart-box { position: relative; height: 320px; }
+.chart-box.tall { height: 380px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--cp-border); }
+th { font-weight: 600; color: var(--cp-text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; user-select: none; }
+th:hover { color: var(--cp-text); }
+tbody tr:hover { background: var(--cp-accent-soft); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.bar-cell { position: relative; }
+.bar-cell .bar {
+  position: absolute; left: 0; top: 0; bottom: 0; background: var(--cp-accent-soft); border-right: 2px solid var(--cp-accent); z-index: 0;
+}
+.bar-cell span { position: relative; z-index: 1; padding: 0 8px; }
+.scroll { max-height: 360px; overflow: auto; }
+.footer { color: var(--cp-text-soft); font-size: 11px; text-align: center; padding: 12px 0 4px; }
+.alert {
+  padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-top: 12px;
+  background: rgba(220, 38, 38, 0.08); color: var(--cp-danger); border: 1px solid rgba(220,38,38,.2);
+}
+.notice {
+  padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-top: 12px;
+  background: var(--cp-accent-soft); color: var(--cp-text); border: 1px solid var(--cp-border);
+}
+.pill {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  background: var(--cp-accent-soft); color: var(--cp-accent); font-size: 11px; font-weight: 600;
+}
+.section-head { margin: 12px 0 0; }
+.section-head h2 { font-size: 17px; font-weight: 600; margin: 0 0 2px; color: var(--cp-text); }
+.section-head p { margin: 0; font-size: 12px; color: var(--cp-text-muted); }
+.tag { display:inline-block; padding:1px 7px; border-radius:6px; font-size:10px; font-weight:600; letter-spacing:.02em; }
+.tag.ent { background: rgba(124,58,237,.14); color:#7c3aed; }
+.tag.biz { background: rgba(0,120,212,.14); color:var(--cp-link); }
+.kpi .value.warn { color: var(--cp-danger); }
+.kpi .value.ok { color: var(--cp-success); }
+.legend-inline { display:flex; flex-wrap:wrap; gap:14px; margin-top:10px; font-size:12px; color:var(--cp-text-muted); }
+.legend-inline span { display:inline-flex; align-items:center; gap:6px; }
+.legend-inline i { width:11px; height:11px; border-radius:3px; display:inline-block; }
+.meter-card { display:grid; grid-template-columns: 1fr auto; gap:18px 28px; align-items:center; }
+.meter-head { font-size:13px; color:var(--cp-text-muted); margin-bottom:10px; }
+.meter-head b { color:var(--cp-text); font-weight:600; }
+.meter-wrap { grid-column: 1 / -1; }
+.meter { position:relative; height:54px; border-radius:12px; overflow:hidden; background: var(--cp-surface-soft); border:1px solid var(--cp-border); display:flex; }
+.meter .seg { height:100%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; color:#fff; white-space:nowrap; overflow:hidden; }
+.meter .seg-pool { background:linear-gradient(90deg,#15803d,#16a34a); }
+.meter .seg-over { background:linear-gradient(90deg,#dc2626,#ef4444); }
+.meter .seg-free { background:transparent; color:var(--cp-text-muted); }
+.meter-marker { position:absolute; top:-4px; bottom:-4px; width:2px; background:var(--cp-text); z-index:2; }
+.meter-marker span { position:absolute; top:-20px; left:50%; transform:translateX(-50%); font-size:10px; font-weight:600; color:var(--cp-text); white-space:nowrap; }
+.meter-stat { text-align:right; }
+.meter-stat .big { font-size:40px; font-weight:700; line-height:1; color:var(--cp-danger); }
+.meter-stat .big.ok { color:var(--cp-success); }
+.meter-stat .lbl { font-size:12px; color:var(--cp-text-muted); margin-top:4px; }
+.meter-foot { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:18px; font-size:12px; color:var(--cp-text-muted); margin-top:2px; }
+.meter-foot b { color:var(--cp-text); }
+.meter-foot .over b { color:var(--cp-danger); }
+.quota-split .qs-row { display:flex; gap:20px; margin-top:6px; }
+.quota-split .qs { display:flex; flex-direction:column; }
+.quota-split .qs-n { font-size:26px; font-weight:600; line-height:1; }
+.quota-split .qs-n.over { color:var(--cp-danger); }
+.quota-split .qs-n.within { color:var(--cp-success); }
+.quota-split .qs-l { font-size:11px; color:var(--cp-text-muted); margin-top:3px; }
+.quota-split .qs-bar { display:flex; height:8px; border-radius:999px; overflow:hidden; margin-top:10px; background:var(--cp-surface-soft); }
+.quota-split .qs-bar-over { background:var(--cp-danger); }
+.quota-split .qs-bar-within { background:var(--cp-success); }
+.quota-split .qs-n.biz { color:var(--cp-link); }
+.quota-split .qs-n.ent { color:#7c3aed; }
+.quota-split .qs-bar-biz { background:var(--cp-link); }
+.quota-split .qs-bar-ent { background:#7c3aed; }
+.topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
+.controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.switch-wrap { display:inline-flex; align-items:center; gap:10px; cursor:pointer; user-select:none; background:var(--cp-surface); border:1px solid var(--cp-border); border-radius:12px; padding:8px 14px; box-shadow:0 0 2px rgba(0,0,0,0.12),0 1px 2px rgba(0,0,0,0.14); }
+.switch-wrap .txt { display:flex; flex-direction:column; line-height:1.2; }
+.switch-wrap .txt b { font-size:13px; color:var(--cp-text); }
+.switch-wrap .txt small { font-size:11px; color:var(--cp-text-muted); }
+.switch { position:relative; width:44px; height:24px; flex:none; }
+.switch input { opacity:0; width:0; height:0; }
+.switch .slider { position:absolute; inset:0; background:var(--cp-border-strong); border-radius:999px; transition:.2s; }
+.switch .slider::before { content:""; position:absolute; height:18px; width:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
+.switch input:checked + .slider { background:var(--cp-accent); }
+.switch input:checked + .slider::before { transform:translateX(20px); }
+.num-field { display:inline-flex; align-items:center; gap:2px; background:var(--cp-surface-soft); border:1px solid var(--cp-border); border-radius:9px; padding:3px 6px 3px 8px; }
+.num-field input { width:46px; border:0; background:transparent; color:var(--cp-text); font-family:inherit; font-size:15px; font-weight:700; text-align:right; outline:none; }
+.num-field input:focus { color:var(--cp-accent); }
+.num-field input:disabled { color:var(--cp-text-soft); cursor:not-allowed; }
+.num-field .pct { font-size:14px; font-weight:600; color:var(--cp-text-muted); }
+.segmented { display:inline-flex; background:var(--cp-surface); border:1px solid var(--cp-border); border-radius:12px; padding:4px; gap:4px; box-shadow:0 0 2px rgba(0,0,0,0.12),0 1px 2px rgba(0,0,0,0.14); }
+.seg-btn { display:flex; flex-direction:column; align-items:flex-start; gap:1px; border:0; background:transparent; color:var(--cp-text-muted); font-family:inherit; font-size:13px; font-weight:600; padding:5px 12px; border-radius:9px; cursor:pointer; line-height:1.2; }
+.seg-btn small { font-size:10px; font-weight:500; color:var(--cp-text-soft); }
+.seg-btn:hover:not(.active) { background:var(--cp-surface-soft); }
+.seg-btn.active { background:var(--cp-accent); color:var(--cp-accent-fg); }
+.seg-btn.active small { color:var(--cp-accent-fg); opacity:.85; }
+</style>
+</head>
+<body>
+<header>
+  <div class="topbar">
+    <div>
+      <h1>GitHub Copilot — AI Credits Dashboard</h1>
+      <p data-i18n-html="intro">Carica uno o più <code>AIUsageReport_*.csv</code> con le colonne <code>date, username, model, quantity, gross_amount, cost_center_name…</code>. L'analisi avviene interamente nel tuo browser, nessun dato viene caricato online.</p>
+    </div>
+    <div class="controls">
+      <div class="segmented" role="group" aria-label="Lingua / Language">
+        <button type="button" id="lang-it" class="seg-btn active">Italiano<small>IT</small></button>
+        <button type="button" id="lang-en" class="seg-btn">English<small>EN</small></button>
+      </div>
+      <div class="segmented" role="group" aria-label="Formato numeri">
+        <button type="button" id="fmt-us" class="seg-btn active" data-i18n-html="fmt_us_html">Formato US<small>1,234.56</small></button>
+        <button type="button" id="fmt-eu" class="seg-btn" data-i18n-html="fmt_eu_html">Formato EU<small>1.234,56</small></button>
+      </div>
+      <div class="switch-wrap" data-i18n-title="disc_title" title="Abilita lo sconto e imposta la percentuale applicata a tutti i valori monetari in $">
+        <span class="txt"><b data-i18n="disc_label">Sconto</b><small data-i18n="disc_sub">valori in $</small></span>
+        <span class="num-field"><input type="number" id="discount-input" min="0" max="100" step="1" value="0" inputmode="decimal" disabled /><span class="pct">%</span></span>
+        <label class="switch"><input type="checkbox" id="discount-toggle" /><span class="slider"></span></label>
+      </div>
+      <label class="switch-wrap" data-i18n-title="promo_title" title="Promozione Giugno-Agosto: +1100 crediti per ogni licenza Business, +3100 per ogni Enterprise. Amplia il pool e riduce la spesa.">
+        <span class="txt"><b data-i18n="promo_label">Promo Giu–Ago</b><small>+1100 Biz / +3100 Ent</small></span>
+        <span class="switch"><input type="checkbox" id="promo-toggle" /><span class="slider"></span></span>
+      </label>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <label id="dropzone" class="drop" for="file-input">
+      <h2 data-i18n="dz_title">Trascina qui i file CSV</h2>
+      <p data-i18n="dz_sub">oppure clicca per selezionarli — puoi caricarne più di uno alla volta</p>
+      <span class="btn" data-i18n="dz_btn">Seleziona file CSV</span>
+      <input id="file-input" type="file" accept=".csv,text/csv" multiple />
+    </label>
+    <div id="files" class="files"></div>
+    <div id="alerts"></div>
+    <div class="actions" id="actions" style="display:none">
+      <button id="btn-export" type="button" data-i18n="btn_export">Esporta dati aggregati (JSON)</button>
+      <button id="btn-clear" type="button" class="danger" data-i18n="btn_clear">Ricomincia</button>
+    </div>
+  </div>
+
+  <div id="dashboard"></div>
+
+  <div class="footer" data-i18n="footer_local">Tutto il parsing avviene in locale · Chart.js + PapaParse via CDN</div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+const state = {
+  files: [],   // [{name, size, status, rows, error}]
+  rows: [],    // merged parsed rows
+  charts: {},
+  lang: 'it',  // lingua dell'interfaccia ('it' o 'en')
+  discount: 0, // sconto applicato ai valori in $ (0 oppure 0.30)
+  numLocale: 'en-US', // formato numerico dei valori in $ ('en-US' o 'it-IT')
+  promo: false,       // promozione Giu-Ago: crediti omaggio per licenza
+  spendFactor: 1,     // <1 quando la promo riduce la spesa
+  sort: { model: {col:'cost', dir:'desc'}, user: {col:'cost', dir:'desc'}, cc: {col:'cost', dir:'desc'} }
+};
+
+const REQUIRED_COLS = ['date','username','model','quantity','gross_amount'];
+
+// ============================================================
+// Helpers
+// ============================================================
+const $ = sel => document.querySelector(sel);
+const fmtUSD = n => {
+  const v = ((Number(n)||0)*(1-state.discount)).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return '$' + (state.numLocale === 'it-IT' ? v.replace(/,/g,'\u00a7').replace(/\./g,',').replace(/\u00a7/g,'.') : v);
+};
+// Formatter per le sole cifre di spesa: applica anche il taglio dei crediti omaggio della promo
+const fmtSpend = n => fmtUSD((Number(n)||0) * state.spendFactor);
+const fmtInt = n => {
+  const v = (Number(n)||0).toLocaleString('en-US');
+  return state.numLocale === 'it-IT' ? v.replace(/,/g,'\u00a7').replace(/\./g,',').replace(/\u00a7/g,'.') : v;
+};
+const fmtPct = n => (Number(n)||0).toFixed(1) + '%';
+const fmtCr = n => fmtInt(Math.round(Number(n)||0));
+const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+// ============================================================
+// Internazionalizzazione (IT / EN)
+// ============================================================
+const T = {
+  it: {
+    intro:'Carica uno o più <code>AIUsageReport_*.csv</code> con le colonne <code>date, username, model, quantity, gross_amount, cost_center_name…</code>. L\'analisi avviene interamente nel tuo browser, nessun dato viene caricato online.',
+    fmt_us_html:'Formato US<small>1,234.56</small>', fmt_eu_html:'Formato EU<small>1.234,56</small>',
+    disc_label:'Sconto', disc_sub:'valori in $',
+    disc_title:'Abilita lo sconto e imposta la percentuale applicata a tutti i valori monetari in $',
+    promo_label:'Promo Giu\u2013Ago',
+    promo_title:'Promozione Giugno-Agosto: +1100 crediti per ogni licenza Business, +3100 per ogni Enterprise. Amplia il pool e riduce la spesa.',
+    dz_title:'Trascina qui i file CSV', dz_sub:'oppure clicca per selezionarli \u2014 puoi caricarne più di uno alla volta',
+    dz_btn:'Seleziona file CSV', btn_export:'Esporta dati aggregati (JSON)', btn_clear:'Ricomincia',
+    footer_local:'Tutto il parsing avviene in locale \u00b7 Chart.js + PapaParse via CDN',
+    only_csv:'Solo file .csv sono supportati.', empty_file:'File vuoto', remove_title:'Rimuovi',
+    rows:'righe', missing_cols:c=>'Colonne mancanti: ' + c,
+    kpi_cost:'Spesa totale (gross)', kpi_cost_sub:'USD, premium requests',
+    kpi_qty:'AI credits consumati', kpi_qty_sub:'unità ai-credits',
+    kpi_users:'Utenti attivi', kpi_users_sub:'username distinti',
+    kpi_models:'Modelli utilizzati', kpi_models_sub:'varianti Auto consolidate',
+    kpi_period:'Periodo', lic_assigned:'Licenze assegnate',
+    card_spend_model:'Spesa per modello (USD)', card_share_model:'Quota di spesa per modello',
+    card_trend:'Trend giornaliero \u2014 top 8 modelli (USD)',
+    card_model_detail:'Dettaglio per modello', card_top_users:'Top 25 utenti per spesa',
+    card_cc:'Spesa per cost center', card_org:'Spesa per organizzazione',
+    th_model:'Modello', th_spend:'Spesa (USD)', th_pct_total:'% totale', th_credits:'Credits',
+    th_requests:'Richieste', th_users:'Utenti', th_user:'Utente', th_models:'Modelli',
+    th_cc:'Cost center', th_license:'Licenza', th_quota:'Quota', th_consumption:'Consumo',
+    th_credits_from_pool:'Crediti dal pool', th_of_which_beyond:'di cui oltre pool', th_cost_beyond:'Costo oltre pool',
+    pool_section_title:'Analisi del pool di AI credits',
+    pool_total:'Pool totale licenze', pool_consumed:'Crediti consumati',
+    pool_util:'Utilizzo del pool', pool_util_sub:'consumo / pool disponibile',
+    pool_over:'Crediti oltre il pool', pool_users_split:'Utenti: oltre vs entro la quota',
+    over_quota:'oltre la quota', within_quota:'entro la quota', meter_lbl:'del pool consumato',
+    card_pool_cap:'Pool disponibile vs consumo reale',
+    legend_within_own:'Entro la propria quota',
+    legend_from_surplus:'Da surplus del pool (crediti altrui inutilizzati)',
+    legend_beyond:'Oltre il pool (pagati extra)', legend_unused:'Pool inutilizzato',
+    card_pool_comp:'Composizione del consumo',
+    card_pool_over_users:'Chi sta usando il pool \u2014 utenti in eccesso rispetto alla propria licenza',
+    ds_spend_usd:'Spesa USD', lbl_license_pool:'Pool licenze', lbl_actual_cons:'Consumo reale',
+    lbl_within_quota:'Entro quota', lbl_from_surplus:'Da surplus pool',
+    lbl_unused_pool:'Pool inutilizzato', lbl_beyond_pool:'Oltre il pool',
+    meter_limit:'limite pool 100%', foot_pool:'Pool:', foot_cons:'Consumo:',
+    available_credits:'crediti disponibili', in_cost:'di costo',
+    paid_extra:'crediti pagati extra', fully_covered:'tutto coperto dal pool',
+    period_sub:(r,f)=>`${r} righe da ${f} file`,
+    meter_head:(a,b)=>`<b>${a}</b> crediti consumati su <b>${b}</b> del pool licenze`,
+    seg_over:cr=>`+${cr} oltre il pool`, seg_consumed:cr=>`Consumati ${cr}`, seg_free:cr=>`${cr} liberi`,
+    foot_over:(cr,p,u)=>`Eccedenza: <b>+${cr} cr (+${p}%) \u00b7 ${u} extra</b>`,
+    foot_margin:cr=>`Margine residuo: <b>${cr} cr</b>`,
+    pool_sub:(n,b,qb,e,qe,cv)=>`Pool = somma delle quote mensili di ${n} utenti attivi (${b} Business \u00d7 ${qb} + ${e} Enterprise \u00d7 ${qe} crediti). 1 credito = ${cv}.`,
+    of_active_users:n=>`su ${n} utenti attivi`
+  },
+  en: {
+    intro:'Upload one or more <code>AIUsageReport_*.csv</code> with the columns <code>date, username, model, quantity, gross_amount, cost_center_name…</code>. The analysis runs entirely in your browser, no data is uploaded online.',
+    fmt_us_html:'US format<small>1,234.56</small>', fmt_eu_html:'EU format<small>1.234,56</small>',
+    disc_label:'Discount', disc_sub:'$ values',
+    disc_title:'Enable the discount and set the percentage applied to all $ monetary values',
+    promo_label:'Promo Jun\u2013Aug',
+    promo_title:'June\u2013August promotion: +1100 credits per Business license, +3100 per Enterprise. Expands the pool and reduces spend.',
+    dz_title:'Drag CSV files here', dz_sub:'or click to select them \u2014 you can upload more than one at a time',
+    dz_btn:'Select CSV files', btn_export:'Export aggregated data (JSON)', btn_clear:'Restart',
+    footer_local:'All parsing happens locally \u00b7 Chart.js + PapaParse via CDN',
+    only_csv:'Only .csv files are supported.', empty_file:'Empty file', remove_title:'Remove',
+    rows:'rows', missing_cols:c=>'Missing columns: ' + c,
+    kpi_cost:'Total spend (gross)', kpi_cost_sub:'USD, premium requests',
+    kpi_qty:'AI credits consumed', kpi_qty_sub:'ai-credits units',
+    kpi_users:'Active users', kpi_users_sub:'distinct usernames',
+    kpi_models:'Models used', kpi_models_sub:'consolidated Auto variants',
+    kpi_period:'Period', lic_assigned:'Assigned licenses',
+    card_spend_model:'Spend by model (USD)', card_share_model:'Spend share by model',
+    card_trend:'Daily trend \u2014 top 8 models (USD)',
+    card_model_detail:'Breakdown by model', card_top_users:'Top 25 users by spend',
+    card_cc:'Spend by cost center', card_org:'Spend by organization',
+    th_model:'Model', th_spend:'Spend (USD)', th_pct_total:'% total', th_credits:'Credits',
+    th_requests:'Requests', th_users:'Users', th_user:'User', th_models:'Models',
+    th_cc:'Cost center', th_license:'License', th_quota:'Quota', th_consumption:'Consumption',
+    th_credits_from_pool:'Credits from pool', th_of_which_beyond:'of which beyond pool', th_cost_beyond:'Cost beyond pool',
+    pool_section_title:'AI credits pool analysis',
+    pool_total:'Total license pool', pool_consumed:'Consumed credits',
+    pool_util:'Pool utilization', pool_util_sub:'consumption / available pool',
+    pool_over:'Credits beyond the pool', pool_users_split:'Users: over vs within quota',
+    over_quota:'over quota', within_quota:'within quota', meter_lbl:'of pool consumed',
+    card_pool_cap:'Available pool vs actual consumption',
+    legend_within_own:'Within own quota',
+    legend_from_surplus:"From pool surplus (others' unused credits)",
+    legend_beyond:'Beyond the pool (paid extra)', legend_unused:'Unused pool',
+    card_pool_comp:'Consumption composition',
+    card_pool_over_users:'Who is using the pool \u2014 users exceeding their license',
+    ds_spend_usd:'USD spend', lbl_license_pool:'License pool', lbl_actual_cons:'Actual consumption',
+    lbl_within_quota:'Within quota', lbl_from_surplus:'From pool surplus',
+    lbl_unused_pool:'Unused pool', lbl_beyond_pool:'Beyond the pool',
+    meter_limit:'pool limit 100%', foot_pool:'Pool:', foot_cons:'Consumption:',
+    available_credits:'available credits', in_cost:'in cost',
+    paid_extra:'credits paid extra', fully_covered:'fully covered by the pool',
+    period_sub:(r,f)=>`${r} rows from ${f} files`,
+    meter_head:(a,b)=>`<b>${a}</b> credits consumed of <b>${b}</b> in the license pool`,
+    seg_over:cr=>`+${cr} beyond the pool`, seg_consumed:cr=>`Consumed ${cr}`, seg_free:cr=>`${cr} free`,
+    foot_over:(cr,p,u)=>`Overage: <b>+${cr} cr (+${p}%) \u00b7 ${u} extra</b>`,
+    foot_margin:cr=>`Remaining margin: <b>${cr} cr</b>`,
+    pool_sub:(n,b,qb,e,qe,cv)=>`Pool = sum of the monthly quotas of ${n} active users (${b} Business \u00d7 ${qb} + ${e} Enterprise \u00d7 ${qe} credits). 1 credit = ${cv}.`,
+    of_active_users:n=>`of ${n} active users`
+  }
+};
+const L = () => T[state.lang];
+const t = k => { const v = T[state.lang][k]; return v == null ? k : v; };
+function applyLang(){
+  document.documentElement.lang = state.lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { const v = T[state.lang][el.getAttribute('data-i18n')]; if (v != null) el.textContent = v; });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { const v = T[state.lang][el.getAttribute('data-i18n-html')]; if (v != null) el.innerHTML = v; });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { const v = T[state.lang][el.getAttribute('data-i18n-title')]; if (v != null) el.title = v; });
+}
+
+function palette(n){
+  const base = [
+    '#b11f4b','#0078d4','#16a34a','#f59e0b','#7c3aed',
+    '#0ea5e9','#dc2626','#0d9488','#a16207','#9333ea',
+    '#475569','#db2777','#65a30d','#ea580c','#1d4ed8','#525252'
+  ];
+  return Array.from({length:n}, (_,i) => base[i % base.length]);
+}
+
+function showAlert(msg, type='alert'){
+  const el = document.createElement('div');
+  el.className = type;
+  el.textContent = msg;
+  $('#alerts').appendChild(el);
+  setTimeout(() => el.remove(), 6000);
+}
+
+// ============================================================
+// File handling
+// ============================================================
+const dropzone = $('#dropzone');
+const fileInput = $('#file-input');
+
+['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, e => {
+  e.preventDefault(); e.stopPropagation(); dropzone.classList.add('drag');
+}));
+['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => {
+  e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('drag');
+}));
+dropzone.addEventListener('drop', e => {
+  const files = Array.from(e.dataTransfer.files || []).filter(f => /\.csv$/i.test(f.name));
+  if (files.length) handleFiles(files);
+  else showAlert(t('only_csv'));
+});
+fileInput.addEventListener('change', e => {
+  const files = Array.from(e.target.files || []);
+  if (files.length) handleFiles(files);
+  fileInput.value = '';
+});
+
+// Sconto: lo slider abilita l'opzione, il campo numerico imposta la percentuale (via fmtUSD)
+function applyDiscount(){
+  const en = $('#discount-toggle').checked;
+  const inp = $('#discount-input');
+  inp.disabled = !en;
+  let v = parseFloat(String(inp.value).replace(',', '.'));
+  if (!Number.isFinite(v)) v = 0;
+  v = Math.min(100, Math.max(0, v));
+  state.discount = en ? v / 100 : 0;
+  if (state.rows.length) rebuildDashboard();
+}
+$('#discount-toggle').addEventListener('change', applyDiscount);
+$('#discount-input').addEventListener('input', applyDiscount);
+
+// Formato numerico: US oppure europeo (opzioni mutuamente esclusive)
+function setFormat(loc){
+  state.numLocale = loc;
+  $('#fmt-us').classList.toggle('active', loc === 'en-US');
+  $('#fmt-eu').classList.toggle('active', loc === 'it-IT');
+  if (state.rows.length) rebuildDashboard();
+}
+$('#fmt-us').addEventListener('click', () => setFormat('en-US'));
+$('#fmt-eu').addEventListener('click', () => setFormat('it-IT'));
+
+// Lingua: IT oppure EN (ricostruisce la dashboard per applicare le stringhe dinamiche)
+function setLang(lang){
+  state.lang = lang;
+  $('#lang-it').classList.toggle('active', lang === 'it');
+  $('#lang-en').classList.toggle('active', lang === 'en');
+  applyLang();
+  if (state.rows.length) rebuildDashboard();
+}
+$('#lang-it').addEventListener('click', () => setLang('it'));
+$('#lang-en').addEventListener('click', () => setLang('en'));
+applyLang();
+
+// Promo Giu-Ago: crediti omaggio che ampliano il pool e riducono la spesa
+$('#promo-toggle').addEventListener('change', e => {
+  state.promo = e.target.checked;
+  if (state.rows.length) rebuildDashboard();
+});
+
+function handleFiles(files){
+  files.forEach(file => {
+    const entry = { name: file.name, size: file.size, status: 'parsing', rows: 0 };
+    state.files.push(entry);
+    renderFiles();
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true, dynamicTyping: false,
+      complete: results => {
+        try {
+          const data = results.data || [];
+          if (!data.length) throw new Error(t('empty_file'));
+          // Validate required columns
+          const missing = REQUIRED_COLS.filter(c => !(c in data[0]));
+          if (missing.length) throw new Error(L().missing_cols(missing.join(', ')));
+          // Source tag
+          data.forEach(r => r.__source_file = file.name);
+          entry.status = 'ok';
+          entry.rows = data.length;
+          state.rows.push(...data);
+          renderFiles();
+          rebuildDashboard();
+        } catch (err) {
+          entry.status = 'error';
+          entry.error = err.message;
+          renderFiles();
+          showAlert(`${file.name}: ${err.message}`);
+        }
+      },
+      error: err => {
+        entry.status = 'error';
+        entry.error = err.message;
+        renderFiles();
+        showAlert(`${file.name}: ${err.message}`);
+      }
+    });
+  });
+}
+
+function renderFiles(){
+  const wrap = $('#files');
+  wrap.innerHTML = '';
+  state.files.forEach((f, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip' + (f.status === 'error' ? ' error' : '');
+    const status = f.status === 'parsing' ? '…' :
+                   f.status === 'error'  ? '⚠ ' + (f.error || '') :
+                   `${fmtInt(f.rows)} ${t('rows')}`;
+    chip.innerHTML = `<span><strong>${escapeHtml(f.name)}</strong> · ${escapeHtml(status)}</span>`;
+    const btn = document.createElement('button');
+    btn.title = t('remove_title'); btn.textContent = '×';
+    btn.onclick = () => removeFile(i);
+    chip.appendChild(btn);
+    wrap.appendChild(chip);
+  });
+  $('#actions').style.display = state.files.some(f => f.status==='ok') ? 'flex' : 'none';
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function removeFile(idx){
+  const f = state.files[idx];
+  state.files.splice(idx,1);
+  if (f.status === 'ok') {
+    state.rows = state.rows.filter(r => r.__source_file !== f.name);
+  }
+  renderFiles();
+  rebuildDashboard();
+}
+
+$('#btn-clear').addEventListener('click', () => {
+  state.files = []; state.rows = [];
+  renderFiles();
+  $('#dashboard').classList.remove('visible');
+  $('#dashboard').innerHTML = '';
+  destroyCharts();
+});
+
+$('#btn-export').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state.lastAgg || {}, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'dashboard_data.json';
+  a.click(); URL.revokeObjectURL(url);
+});
+
+// ============================================================
+// Aggregations
+// ============================================================
+function aggregate(rows){
+  if (!rows.length) return null;
+  const stripAuto = m => String(m||'').replace(/^Auto:\s*/i,'');
+  const isAuto    = m => /^Auto:/i.test(String(m||''));
+
+  let totalCost = 0, totalQty = 0;
+  const users = new Set(), modelsBase = new Set(), files = new Set();
+  let dateMin = null, dateMax = null;
+
+  const byModel = new Map();    // model_base -> {cost, qty, users:Set, requests}
+  const byDate  = new Map();    // date -> cost
+  const byDateModel = new Map();// date -> Map(model_base -> cost)
+  const byOrgFile = new Map();  // file -> cost
+  const byCC = new Map();       // cost_center -> {cost, users:Set}
+  const byUser = new Map();     // username -> {cost, qty, models:Set}
+
+  for (const r of rows) {
+    const cost = num(r.gross_amount);
+    const qty  = num(r.quantity);
+    const user = String(r.username || '').trim();
+    const model = String(r.model || '').trim();
+    const mBase = stripAuto(model) || '(unknown)';
+    const date = String(r.date || '').trim().slice(0,10);
+    const cc   = (r.cost_center_name && String(r.cost_center_name).trim()) || '(unspecified)';
+    const file = r.__source_file || '(unknown)';
+    const org = orgFromFilename(file);
+    const quota = num(r.total_monthly_quota);
+
+    totalCost += cost;
+    totalQty  += qty;
+    if (user) users.add(user);
+    if (mBase) modelsBase.add(mBase);
+    files.add(file);
+    if (date) {
+      if (!dateMin || date < dateMin) dateMin = date;
+      if (!dateMax || date > dateMax) dateMax = date;
+    }
+
+    let m = byModel.get(mBase);
+    if (!m) { m = {cost:0, qty:0, users:new Set(), requests:0}; byModel.set(mBase, m); }
+    m.cost += cost; m.qty += qty; m.requests++; if (user) m.users.add(user);
+
+    if (date) byDate.set(date, (byDate.get(date)||0) + cost);
+
+    if (date) {
+      let dm = byDateModel.get(date);
+      if (!dm) { dm = new Map(); byDateModel.set(date, dm); }
+      dm.set(mBase, (dm.get(mBase)||0) + cost);
+    }
+
+    byOrgFile.set(org, (byOrgFile.get(org)||0) + cost);
+
+    let ccr = byCC.get(cc);
+    if (!ccr) { ccr = {cost:0, users:new Set()}; byCC.set(cc, ccr); }
+    ccr.cost += cost; if (user) ccr.users.add(user);
+
+    if (user) {
+      let u = byUser.get(user);
+      if (!u) { u = {cost:0, qty:0, models:new Set(), quota:0, cc:'(unspecified)'}; byUser.set(user, u); }
+      u.cost += cost; u.qty += qty; u.models.add(mBase);
+      if (quota > u.quota) u.quota = quota;
+      if (u.cc === '(unspecified)' && cc !== '(unspecified)') u.cc = cc;
+    }
+  }
+
+  const modelArr = [...byModel.entries()].map(([k,v]) => ({
+    model_base: k, cost: round(v.cost,4), qty: round(v.qty,2), users: v.users.size, requests: v.requests
+  })).sort((a,b) => b.cost - a.cost);
+
+  const dateArr = [...byDate.entries()].map(([d,c]) => ({date:d, gross_amount: round(c,4)}))
+    .sort((a,b) => a.date.localeCompare(b.date));
+
+  const topModelNames = modelArr.slice(0,8).map(m => m.model_base);
+  const dates = dateArr.map(d => d.date);
+  const series = {};
+  topModelNames.forEach(m => series[m] = dates.map(d => round(byDateModel.get(d)?.get(m) || 0, 4)));
+
+  const ccArr = [...byCC.entries()].map(([k,v]) => ({cost_center_name:k, cost: round(v.cost,4), users: v.users.size}))
+    .sort((a,b) => b.cost - a.cost);
+
+  const userArr = [...byUser.entries()].map(([k,v]) => ({
+    username:k, cost: round(v.cost,4), qty: round(v.qty,2), models: v.models.size
+  })).sort((a,b) => b.cost - a.cost);
+
+  const orgArr = [...byOrgFile.entries()].map(([k,v]) => ({org_file:k, gross_amount: round(v,4)}))
+    .sort((a,b) => b.gross_amount - a.gross_amount);
+
+  // ---- Pool di AI credits (base + variante promo Giu-Ago) ----
+  const pool = computePool(byUser);
+  const poolPromo = computePool(byUser, 1100, 3100);
+
+  return {
+    summary: {
+      total_cost: round(totalCost,4),
+      total_qty: round(totalQty,2),
+      unique_users: users.size,
+      unique_models: modelsBase.size,
+      date_min: dateMin || '—',
+      date_max: dateMax || '—',
+      total_rows: rows.length,
+      total_files: files.size
+    },
+    by_model: modelArr,
+    by_date: dateArr,
+    by_date_model: { dates, models: topModelNames, series },
+    by_cost_center: ccArr,
+    top_users: userArr.slice(0,25),
+    all_users: userArr,
+    by_org_file: orgArr,
+    pool,
+    poolPromo
+  };
+}
+
+// Calcola il pool di AI credits a partire dalle quote mensili per utente.
+function computePool(byUser, bonusBiz=0, bonusEnt=0){
+  const CREDIT_VALUE = 0.01;
+  const licOf = q => q >= 3900 ? 'Enterprise' : 'Business';
+  const usersWithQuota = [...byUser.entries()].filter(([, v]) => v.quota > 0);
+  if (!usersWithQuota.length) return null;
+
+  let poolCredits = 0, consumedCredits = 0, totalExcess = 0, totalSurplus = 0;
+  let nBiz = 0, nEnt = 0, bizPool = 0, entPool = 0;
+  const overRows = [];
+  for (const [uname, v] of usersWithQuota) {
+    const lic = licOf(v.quota);                                          // licenza dalla quota base
+    const quota = v.quota + (lic === 'Enterprise' ? bonusEnt : bonusBiz); // + crediti omaggio promo
+    const cons = v.qty;
+    if (lic === 'Enterprise') { nEnt++; entPool += quota; } else { nBiz++; bizPool += quota; }
+    poolCredits += quota; consumedCredits += cons;
+    const excess = Math.max(0, cons - quota), surplus = Math.max(0, quota - cons);
+    totalExcess += excess; totalSurplus += surplus;
+    if (excess > 0) overRows.push({
+      username: uname, license: lic, cost_center_name: v.cc,
+      quota, consumed: round(cons,4), excess: round(excess,4)
+    });
+  }
+  const overageCredits = Math.max(0, consumedCredits - poolCredits);
+  const coveredByPool = Math.min(totalExcess, totalSurplus);
+  overRows.forEach(r => {
+    const share = totalExcess > 0 ? r.excess / totalExcess : 0;
+    const beyond = overageCredits * share;
+    r.beyond_pool = round(beyond,4);
+    r.beyond_pool_usd = round(beyond * CREDIT_VALUE,4);
+    r.within_pool = round(r.excess - beyond,4);
+  });
+  overRows.sort((a,b) => b.excess - a.excess);
+  const withinQuota = consumedCredits - totalExcess;
+
+  return {
+    credit_value: CREDIT_VALUE,
+    pool_credits: round(poolCredits,2), pool_usd: round(poolCredits*CREDIT_VALUE,2),
+    consumed_credits: round(consumedCredits,2), consumed_usd: round(consumedCredits*CREDIT_VALUE,2),
+    unused_pool_credits: round(Math.max(0, poolCredits - consumedCredits),2),
+    utilization_pct: poolCredits ? round(consumedCredits/poolCredits*100,2) : 0,
+    surplus_credits: round(totalSurplus,2), excess_credits: round(totalExcess,2),
+    covered_by_pool_credits: round(coveredByPool,2),
+    overage_credits: round(overageCredits,2), overage_usd: round(overageCredits*CREDIT_VALUE,2),
+    n_users: usersWithQuota.length, n_overusers: overRows.length,
+    n_underusers: usersWithQuota.length - overRows.length,
+    n_business: nBiz, n_enterprise: nEnt,
+    by_license: [
+      { license:'Business', count:nBiz, quota_each: nBiz ? Math.round(bizPool/nBiz) : 1900, pool_credits: bizPool },
+      { license:'Enterprise', count:nEnt, quota_each: nEnt ? Math.round(entPool/nEnt) : 3900, pool_credits: entPool }
+    ],
+    capacity_breakdown: {
+      within_quota: round(withinQuota,2),
+      from_surplus: round(coveredByPool,2),
+      beyond_pool: round(overageCredits,2)
+    },
+    over_users: overRows
+  };
+}
+
+function round(n, d){ const f = 10**d; return Math.round(n*f)/f; }
+
+function orgFromFilename(name){
+  let s = String(name || '').replace(/\.csv$/i, '');
+  s = s.replace(/^AIUsageReport[_-]/i, '');
+  // Strip trailing date ranges like "-1-12 Giugno 2026", "-2026-06-01_to_2026-06-12"
+  s = s.replace(/[-_]\d{1,2}[-_]\d{1,2}\s+\S+\s+\d{4}$/i, '');
+  s = s.replace(/[-_]\d{4}[-_]\d{2}[-_]\d{2}.*$/, '');
+  s = s.replace(/[-_]+$/, '');
+  return s.trim() || name;
+}
+
+// ============================================================
+// Render dashboard
+// ============================================================
+function destroyCharts(){
+  Object.values(state.charts).forEach(c => c && c.destroy && c.destroy());
+  state.charts = {};
+}
+
+function rebuildDashboard(){
+  destroyCharts();
+  const dash = $('#dashboard');
+  if (!state.rows.length) { dash.classList.remove('visible'); dash.innerHTML=''; return; }
+
+  const agg = aggregate(state.rows);
+  state.lastAgg = agg;
+  const s = agg.summary;
+  // Promo Giu-Ago: pool ampliato e spesa ridotta dei crediti omaggio (overage eliminato)
+  const P = state.promo ? (agg.poolPromo || agg.pool) : agg.pool;
+  const promoSavings = (agg.pool && agg.poolPromo) ? (agg.pool.overage_usd - agg.poolPromo.overage_usd) : 0;
+  state.spendFactor = (state.promo && s.total_cost > 0) ? (s.total_cost - promoSavings) / s.total_cost : 1;
+
+  dash.innerHTML = `
+    <div class="kpis">
+      <div class="card kpi"><div class="label">${t('kpi_cost')}</div><div class="value">${fmtSpend(s.total_cost)}</div><div class="sub">${t('kpi_cost_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('kpi_qty')}</div><div class="value">${fmtInt(Math.round(s.total_qty))}</div><div class="sub">${t('kpi_qty_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('kpi_users')}</div><div class="value">${fmtInt(s.unique_users)}</div><div class="sub">${t('kpi_users_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('kpi_models')}</div><div class="value">${fmtInt(s.unique_models)}</div><div class="sub">${t('kpi_models_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('kpi_period')}</div><div class="value" style="font-size:18px">${s.date_min} → ${s.date_max}</div><div class="sub">${L().period_sub(fmtInt(s.total_rows), s.total_files)}</div></div>
+      ${agg.pool ? `<div class="card kpi quota-split">
+        <div class="label">${t('lic_assigned')}</div>
+        <div class="qs-row">
+          <div class="qs"><span class="qs-n biz" id="lic-biz"></span><span class="qs-l">Copilot Business</span></div>
+          <div class="qs"><span class="qs-n ent" id="lic-ent"></span><span class="qs-l">Copilot Enterprise</span></div>
+        </div>
+        <div class="qs-bar"><div class="qs-bar-biz" id="lic-bar-biz"></div><div class="qs-bar-ent" id="lic-bar-ent"></div></div>
+      </div>` : ''}
+    </div>
+
+    <div class="grid-2">
+      <div class="card"><h2>${t('card_spend_model')}</h2><div class="chart-box tall"><canvas id="chart-model"></canvas></div></div>
+      <div class="card"><h2>${t('card_share_model')}</h2><div class="chart-box tall"><canvas id="chart-model-pie"></canvas></div></div>
+    </div>
+
+    <div class="card"><h2>${t('card_trend')}</h2><div class="chart-box tall"><canvas id="chart-trend"></canvas></div></div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>${t('card_model_detail')}</h2>
+        <div class="scroll"><table id="tbl-model">
+          <thead><tr>
+            <th data-sort="model_base">${t('th_model')}</th>
+            <th class="num" data-sort="cost">${t('th_spend')}</th>
+            <th class="num" data-sort="cost">${t('th_pct_total')}</th>
+            <th class="num" data-sort="qty">${t('th_credits')}</th>
+            <th class="num" data-sort="requests">${t('th_requests')}</th>
+            <th class="num" data-sort="users">${t('th_users')}</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h2>${t('card_top_users')}</h2>
+        <div class="scroll"><table id="tbl-users">
+          <thead><tr>
+            <th data-sort="username">${t('th_user')}</th>
+            <th class="num" data-sort="cost">${t('th_spend')}</th>
+            <th class="num" data-sort="qty">${t('th_credits')}</th>
+            <th class="num" data-sort="models">${t('th_models')}</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>${t('card_cc')}</h2>
+        <div class="scroll"><table id="tbl-cc">
+          <thead><tr>
+            <th data-sort="cost_center_name">${t('th_cc')}</th>
+            <th class="num" data-sort="cost">${t('th_spend')}</th>
+            <th class="num" data-sort="cost">${t('th_pct_total')}</th>
+            <th class="num" data-sort="users">${t('th_users')}</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h2>${t('card_org')}</h2>
+        <div class="chart-box"><canvas id="chart-org"></canvas></div>
+      </div>
+    </div>
+    ${agg.pool ? `
+    <div class="section-head">
+      <h2>${t('pool_section_title')}</h2>
+      <p id="pool-sub"></p>
+    </div>
+
+    <div class="kpis">
+      <div class="card kpi"><div class="label">${t('pool_total')}</div><div class="value" id="pool-kpi-pool"></div><div class="sub" id="pool-kpi-pool-sub"></div></div>
+      <div class="card kpi"><div class="label">${t('pool_consumed')}</div><div class="value" id="pool-kpi-cons"></div><div class="sub" id="pool-kpi-cons-sub"></div></div>
+      <div class="card kpi"><div class="label">${t('pool_util')}</div><div class="value" id="pool-kpi-util"></div><div class="sub">${t('pool_util_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('pool_over')}</div><div class="value warn" id="pool-kpi-over"></div><div class="sub" id="pool-kpi-over-sub"></div></div>
+      <div class="card kpi quota-split">
+        <div class="label">${t('pool_users_split')}</div>
+        <div class="qs-row">
+          <div class="qs"><span class="qs-n over" id="qs-over"></span><span class="qs-l">${t('over_quota')}</span></div>
+          <div class="qs"><span class="qs-n within" id="qs-within"></span><span class="qs-l">${t('within_quota')}</span></div>
+        </div>
+        <div class="qs-bar"><div class="qs-bar-over" id="qs-bar-over"></div><div class="qs-bar-within" id="qs-bar-within"></div></div>
+        <div class="sub" id="pool-kpi-overusers-sub"></div>
+      </div>
+    </div>
+
+    <div class="card meter-card">
+      <div class="meter-head" id="meter-head"></div>
+      <div class="meter-stat">
+        <div class="big" id="meter-util"></div>
+        <div class="lbl">${t('meter_lbl')}</div>
+      </div>
+      <div class="meter-wrap">
+        <div class="meter" id="meter-bar"></div>
+      </div>
+      <div class="meter-foot" id="meter-foot"></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>${t('card_pool_cap')}</h2>
+        <div class="chart-box"><canvas id="chart-pool-cap"></canvas></div>
+        <div class="legend-inline">
+          <span><i style="background:#16a34a"></i> ${t('legend_within_own')}</span>
+          <span><i style="background:#f59e0b"></i> ${t('legend_from_surplus')}</span>
+          <span><i style="background:#dc2626"></i> ${t('legend_beyond')}</span>
+          <span><i style="background:#94a3b8"></i> ${t('legend_unused')}</span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>${t('card_pool_comp')}</h2>
+        <div class="chart-box"><canvas id="chart-pool-comp"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>${t('card_pool_over_users')}</h2>
+      <div class="scroll">
+        <table id="tbl-pool-over">
+          <thead><tr>
+            <th>${t('th_user')}</th><th>${t('th_license')}</th><th>${t('th_cc')}</th>
+            <th class="num">${t('th_quota')}</th><th class="num">${t('th_consumption')}</th>
+            <th class="num">${t('th_credits_from_pool')}</th><th class="num">${t('th_of_which_beyond')}</th><th class="num">${t('th_cost_beyond')}</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    ` : ''}
+  `;
+  dash.classList.add('visible');
+
+  // Theme colors after DOM ready
+  const css = getComputedStyle(document.documentElement);
+  const C = {
+    text:   css.getPropertyValue('--cp-text').trim(),
+    muted:  css.getPropertyValue('--cp-text-muted').trim(),
+    border: css.getPropertyValue('--cp-border').trim(),
+    accent: css.getPropertyValue('--cp-accent').trim(),
+  };
+  Chart.defaults.color = C.muted;
+  Chart.defaults.borderColor = C.border;
+  Chart.defaults.font.family = '"Segoe UI", Aptos, Calibri, -apple-system, sans-serif';
+
+  // Charts
+  const modelLabels = agg.by_model.map(r => r.model_base);
+  const modelCosts  = agg.by_model.map(r => r.cost);
+
+  state.charts.model = new Chart($('#chart-model'), {
+    type:'bar',
+    data:{ labels: modelLabels, datasets:[{ label:t('ds_spend_usd'), data: modelCosts, backgroundColor: C.accent, borderRadius:4 }]},
+    options:{
+      indexAxis:'y', maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ' ' + fmtSpend(ctx.parsed.x) }}},
+      scales:{ x:{ ticks:{ callback:v=>fmtSpend(v) }, grid:{color:C.border} }, y:{ grid:{display:false} } }
+    }
+  });
+
+  state.charts.pie = new Chart($('#chart-model-pie'), {
+    type:'doughnut',
+    data:{ labels: modelLabels, datasets:[{ data: modelCosts, backgroundColor: palette(modelLabels.length), borderColor:'transparent' }]},
+    options:{
+      maintainAspectRatio:false, cutout:'55%',
+      plugins:{
+        legend:{ position:'right', labels:{ boxWidth:12, font:{size:11}, color:C.text } },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${fmtSpend(ctx.parsed)} (${((ctx.parsed/s.total_cost)*100).toFixed(1)}%)` }}
+      }
+    }
+  });
+
+  const td = agg.by_date_model;
+  const tdColors = palette(td.models.length);
+  state.charts.trend = new Chart($('#chart-trend'), {
+    type:'bar',
+    data:{
+      labels: td.dates,
+      datasets: td.models.map((m,i) => ({ label:m, data: td.series[m], backgroundColor: tdColors[i], stack:'a', borderWidth:0 }))
+    },
+    options:{
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{ position:'bottom', labels:{ boxWidth:12, font:{size:11}, color:C.text } },
+        tooltip:{ mode:'index', callbacks:{ label: ctx => ` ${ctx.dataset.label}: ${fmtSpend(ctx.parsed.y)}` }}
+      },
+      scales:{
+        x:{ stacked:true, grid:{display:false} },
+        y:{ stacked:true, ticks:{ callback:v=>fmtSpend(v) }, grid:{color:C.border} }
+      }
+    }
+  });
+
+  const org = agg.by_org_file;
+  state.charts.org = new Chart($('#chart-org'), {
+    type:'bar',
+    data:{ labels: org.map(o=>o.org_file), datasets:[{ data: org.map(o=>o.gross_amount), backgroundColor: palette(org.length), borderRadius:4 }]},
+    options:{
+      maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ' ' + fmtSpend(ctx.parsed.y) }}},
+      scales:{ y:{ ticks:{ callback:v=>fmtSpend(v) }, grid:{color:C.border} }, x:{ grid:{display:false} } }
+    }
+  });
+
+  // Tables
+  renderModelTable(agg);
+  renderUsersTable(agg);
+  renderCCTable(agg);
+
+  // Pool di AI credits
+  if (agg.pool) renderPool(P, C);
+
+  // Sort handlers
+  attachSort('#tbl-model', () => state.lastAgg.by_model, renderModelTable);
+  attachSort('#tbl-users', () => state.lastAgg.top_users, renderUsersTable);
+  attachSort('#tbl-cc',    () => state.lastAgg.by_cost_center, renderCCTable);
+}
+
+function attachSort(tblSel, getRows, renderer){
+  document.querySelectorAll(`${tblSel} thead th`).forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort; if (!col) return;
+      const key = tblSel.replace('#tbl-','');
+      const cur = state.sort[key] || {col:null, dir:'desc'};
+      const dir = (cur.col === col && cur.dir === 'desc') ? 'asc' : 'desc';
+      state.sort[key] = {col, dir};
+      const rows = [...getRows()];
+      rows.sort((a,b) => {
+        const va = a[col], vb = b[col];
+        if (typeof va === 'number' && typeof vb === 'number') return dir==='desc' ? vb - va : va - vb;
+        return dir==='desc' ? String(vb).localeCompare(String(va)) : String(va).localeCompare(String(vb));
+      });
+      renderer(state.lastAgg, rows);
+    });
+  });
+}
+
+function renderModelTable(agg, rowsOverride){
+  const rows = rowsOverride || agg.by_model;
+  const tot = agg.summary.total_cost;
+  const max = Math.max(...rows.map(r=>r.cost), 1);
+  const tbody = document.querySelector('#tbl-model tbody');
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="bar-cell"><div class="bar" style="width:${(r.cost/max)*100}%"></div><span>${escapeHtml(r.model_base)}</span></td>
+      <td class="num">${fmtSpend(r.cost)}</td>
+      <td class="num">${fmtPct((r.cost/tot)*100)}</td>
+      <td class="num">${fmtInt(Math.round(r.qty))}</td>
+      <td class="num">${fmtInt(r.requests)}</td>
+      <td class="num">${fmtInt(r.users)}</td>
+    </tr>`).join('');
+}
+
+function renderUsersTable(agg, rowsOverride){
+  const rows = rowsOverride || agg.top_users;
+  const max = Math.max(...rows.map(r=>r.cost), 1);
+  const tbody = document.querySelector('#tbl-users tbody');
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="bar-cell"><div class="bar" style="width:${(r.cost/max)*100}%"></div><span>${escapeHtml(r.username)}</span></td>
+      <td class="num">${fmtSpend(r.cost)}</td>
+      <td class="num">${fmtInt(Math.round(r.qty))}</td>
+      <td class="num">${fmtInt(r.models)}</td>
+    </tr>`).join('');
+}
+
+function renderCCTable(agg, rowsOverride){
+  const rows = rowsOverride || agg.by_cost_center;
+  const tot = agg.summary.total_cost;
+  const max = Math.max(...rows.map(r=>r.cost), 1);
+  const tbody = document.querySelector('#tbl-cc tbody');
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="bar-cell"><div class="bar" style="width:${(r.cost/max)*100}%"></div><span>${escapeHtml(r.cost_center_name)}</span></td>
+      <td class="num">${fmtSpend(r.cost)}</td>
+      <td class="num">${fmtPct((r.cost/tot)*100)}</td>
+      <td class="num">${fmtInt(r.users)}</td>
+    </tr>`).join('');
+}
+
+function renderPool(P, C){
+  if (!P) return;
+
+  $('#lic-biz').textContent = fmtInt(P.n_business);
+  $('#lic-ent').textContent = fmtInt(P.n_enterprise);
+  const totLic = (P.n_business + P.n_enterprise) || 1;
+  $('#lic-bar-biz').style.width = (P.n_business / totLic * 100) + '%';
+  $('#lic-bar-ent').style.width = (P.n_enterprise / totLic * 100) + '%';
+
+  document.querySelector('#pool-sub').textContent =
+    L().pool_sub(fmtInt(P.n_users), fmtInt(P.n_business), fmtInt(P.by_license[0].quota_each), fmtInt(P.n_enterprise), fmtInt(P.by_license[1].quota_each), fmtUSD(P.credit_value));
+
+  $('#pool-kpi-pool').textContent = fmtUSD(P.pool_usd);
+  $('#pool-kpi-pool-sub').textContent = fmtCr(P.pool_credits) + ' ' + t('available_credits');
+  $('#pool-kpi-cons').textContent = fmtCr(P.consumed_credits);
+  $('#pool-kpi-cons-sub').textContent = fmtUSD(P.consumed_usd) + ' ' + t('in_cost');
+  const utilEl = $('#pool-kpi-util');
+  utilEl.textContent = fmtPct(P.utilization_pct);
+  utilEl.classList.remove('warn','ok');
+  utilEl.classList.add(P.utilization_pct > 100 ? 'warn' : 'ok');
+  const overEl = $('#pool-kpi-over');
+  overEl.textContent = fmtUSD(P.overage_usd);
+  overEl.classList.toggle('warn', P.overage_credits > 0);
+  overEl.classList.toggle('ok', P.overage_credits <= 0);
+  $('#pool-kpi-over-sub').textContent =
+    P.overage_credits > 0 ? fmtCr(P.overage_credits) + ' ' + t('paid_extra') : t('fully_covered');
+  const totQuotaUsers = P.n_users || 1;
+  $('#qs-over').textContent = fmtInt(P.n_overusers);
+  $('#qs-within').textContent = fmtInt(P.n_underusers);
+  $('#qs-bar-over').style.width = (P.n_overusers / totQuotaUsers * 100) + '%';
+  $('#qs-bar-within').style.width = (P.n_underusers / totQuotaUsers * 100) + '%';
+  $('#pool-kpi-overusers-sub').textContent = L().of_active_users(fmtInt(P.n_users));
+
+  // Meter d'impatto: consumo vs pool
+  (() => {
+    const consumed = P.consumed_credits, pool = P.pool_credits, overage = P.overage_credits;
+    const over = overage > 0;
+    const scaleMax = Math.max(consumed, pool) || 1;
+    const poolW = pool / scaleMax * 100;
+    const overW = overage / scaleMax * 100;
+    const usedW = Math.min(consumed, pool) / scaleMax * 100;
+    const freeW = Math.max(0, (pool - consumed)) / scaleMax * 100;
+
+    $('#meter-head').innerHTML = L().meter_head(fmtCr(consumed), fmtCr(pool));
+    const u = $('#meter-util');
+    u.textContent = fmtPct(P.utilization_pct);
+    if (!over) u.classList.add('ok');
+
+    const bar = $('#meter-bar');
+    if (over) {
+      bar.innerHTML =
+        `<div class="seg seg-pool" style="width:${poolW}%">Pool ${fmtCr(pool)}</div>` +
+        `<div class="seg seg-over" style="width:${overW}%">${L().seg_over(fmtCr(overage))}</div>` +
+        `<div class="meter-marker" style="left:${poolW}%"><span>${t('meter_limit')}</span></div>`;
+    } else {
+      bar.innerHTML =
+        `<div class="seg seg-pool" style="width:${usedW}%">${L().seg_consumed(fmtCr(consumed))}</div>` +
+        `<div class="seg seg-free" style="width:${freeW}%">${L().seg_free(fmtCr(pool-consumed))}</div>`;
+    }
+
+    let html =
+      `<span>${t('foot_pool')} <b>${fmtUSD(P.pool_usd)}</b> · ${fmtCr(pool)} cr</span>` +
+      `<span>${t('foot_cons')} <b>${fmtUSD(P.consumed_usd)}</b> · ${fmtCr(consumed)} cr</span>`;
+    if (over) {
+      html += `<span class="over">${L().foot_over(fmtCr(overage), (P.utilization_pct-100).toFixed(1), fmtUSD(P.overage_usd))}</span>`;
+    } else {
+      html += `<span>${L().foot_margin(fmtCr(pool-consumed))}</span>`;
+    }
+    $('#meter-foot').innerHTML = html;
+  })();
+
+  // Barra: Pool disponibile vs consumo reale (le due barre condividono la base del pool)
+  const cap = P.capacity_breakdown;
+  state.charts.poolCap = new Chart($('#chart-pool-cap'), {
+    type:'bar',
+    data:{
+      labels:[t('lbl_license_pool'),t('lbl_actual_cons')],
+      datasets:[
+        { label:t('lbl_within_quota'),  data:[cap.within_quota, cap.within_quota], backgroundColor:'#16a34a', stack:'a', borderWidth:0 },
+        { label:t('lbl_from_surplus'),  data:[cap.from_surplus, cap.from_surplus], backgroundColor:'#f59e0b', stack:'a', borderWidth:0 },
+        { label:t('lbl_unused_pool'),   data:[P.unused_pool_credits, 0],           backgroundColor:'#94a3b8', stack:'a', borderWidth:0 },
+        { label:t('lbl_beyond_pool'),   data:[0, cap.beyond_pool],                 backgroundColor:'#dc2626', stack:'a', borderWidth:0 }
+      ]
+    },
+    options:{
+      indexAxis:'y', maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{ callbacks:{ label: ctx => ctx.parsed.x ? ` ${ctx.dataset.label}: ${fmtCr(ctx.parsed.x)} cr (${fmtUSD(ctx.parsed.x*P.credit_value)})` : null }}
+      },
+      scales:{ x:{ stacked:true, ticks:{ callback:v=>fmtCr(v) }, grid:{color:C.border} }, y:{ stacked:true, grid:{display:false} } }
+    }
+  });
+
+  // Doughnut: composizione del consumo
+  state.charts.poolComp = new Chart($('#chart-pool-comp'), {
+    type:'doughnut',
+    data:{
+      labels:[t('lbl_within_quota'),t('lbl_from_surplus'),t('lbl_beyond_pool')],
+      datasets:[{ data:[cap.within_quota, cap.from_surplus, cap.beyond_pool], backgroundColor:['#16a34a','#f59e0b','#dc2626'], borderColor:'transparent' }]
+    },
+    options:{
+      maintainAspectRatio:false, cutout:'55%',
+      plugins:{
+        legend:{ position:'right', labels:{ boxWidth:12, font:{size:11}, color:C.text } },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.label}: ${fmtCr(ctx.parsed)} cr (${((ctx.parsed/P.consumed_credits)*100).toFixed(1)}%)` }}
+      }
+    }
+  });
+
+  // Tabella over-user
+  const maxExc = Math.max(...P.over_users.map(r=>r.excess), 1);
+  const tbody = document.querySelector('#tbl-pool-over tbody');
+  tbody.innerHTML = P.over_users.map(r => {
+    const barW = (r.excess/maxExc)*100;
+    const tag = r.license === 'Enterprise' ? `<span class="tag ent">Enterprise</span>` : `<span class="tag biz">Business</span>`;
+    return `
+    <tr>
+      <td class="bar-cell"><div class="bar" style="width:${barW}%"></div><span>${escapeHtml(r.username)}</span></td>
+      <td>${tag}</td>
+      <td>${escapeHtml(r.cost_center_name)}</td>
+      <td class="num">${fmtCr(r.quota)}</td>
+      <td class="num">${fmtCr(r.consumed)}</td>
+      <td class="num">${fmtCr(r.excess)}</td>
+      <td class="num">${fmtCr(r.beyond_pool)}</td>
+      <td class="num">${fmtUSD(r.beyond_pool_usd)}</td>
+    </tr>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
