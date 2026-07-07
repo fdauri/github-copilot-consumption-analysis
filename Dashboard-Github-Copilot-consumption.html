@@ -206,6 +206,43 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .seg-btn:hover:not(.active) { background:var(--cp-surface-soft); }
 .seg-btn.active { background:var(--cp-accent); color:var(--cp-accent-fg); }
 .seg-btn.active small { color:var(--cp-accent-fg); opacity:.85; }
+/* Tabs */
+.tabbar { display:none; gap:8px; flex-wrap:wrap; }
+.tab-btn { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--cp-border); background:var(--cp-surface); color:var(--cp-text-muted); font-family:inherit; font-size:14px; font-weight:600; padding:10px 18px; border-radius:12px; cursor:pointer; box-shadow:0 0 2px rgba(0,0,0,0.12),0 1px 2px rgba(0,0,0,0.14); }
+.tab-btn:hover:not(.active) { border-color:var(--cp-border-strong); color:var(--cp-text); }
+.tab-btn.active { background:var(--cp-accent); color:var(--cp-accent-fg); border-color:var(--cp-accent); }
+#panel-universal, #panel-individual, #panel-budget, #panel-org { display:none; grid-gap:16px; }
+/* Docs reference + org budget helpers */
+.docs-ref { font-size:12px; color:var(--cp-text-muted); line-height:1.6; }
+.docs-ref b { color:var(--cp-text); }
+.docs-ref ul { margin:8px 0 0; padding-left:18px; }
+.docs-ref a { color:var(--cp-link); }
+.org-buffer { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--cp-text); }
+.tag.st-proj { background:rgba(245,158,11,.18); color:#b45309; }
+html[data-theme="dark"] .tag.st-proj { color:#fbbf24; }
+/* Status badges (Individual ULB) */
+.tag.st-over { background:rgba(220,38,38,.14); color:var(--cp-danger); }
+.tag.st-near { background:rgba(245,158,11,.18); color:#b45309; }
+.tag.st-ok { background:rgba(22,163,74,.14); color:var(--cp-success); }
+html[data-theme="dark"] .tag.st-near { color:#fbbf24; }
+/* Universal ULB controls */
+.ulb-controls .ulb-ctrl-head { display:flex; flex-direction:column; gap:2px; margin-bottom:12px; }
+.ulb-controls .ulb-ctrl-head b { font-size:14px; color:var(--cp-text); }
+.ulb-controls .ulb-ctrl-head span { font-size:12px; color:var(--cp-text-muted); }
+.ulb-ctrl-row { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+.ulb-custom { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--cp-text); }
+.ulb-size-card .ulb-size-input { display:flex; gap:12px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
+.ulb-size-card .ulb-size-input label { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--cp-text); }
+.ulb-coverage { display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+.ulb-cov-big { font-size:40px; font-weight:700; line-height:1; }
+.ulb-cov-big.ok { color:var(--cp-success); } .ulb-cov-big.warn { color:var(--cp-danger); }
+.ulb-cov-lbl { font-size:12px; color:var(--cp-text-muted); }
+.ulb-cov-foot { font-size:12px; color:var(--cp-text-muted); margin-top:10px; }
+/* Individual ULB table head + search */
+.indiv-table-head { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+.indiv-table-head h2 { margin:0; }
+.indiv-search { border:1px solid var(--cp-border); background:var(--cp-surface-soft); color:var(--cp-text); border-radius:9px; padding:7px 11px; font-family:inherit; font-size:13px; outline:none; min-width:200px; }
+.indiv-search:focus { border-color:var(--cp-accent); }
 </style>
 </head>
 <body>
@@ -253,7 +290,19 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     </div>
   </div>
 
+  <div id="tabbar" class="tabbar">
+    <button type="button" class="tab-btn active" data-tab="overview" data-i18n="tab_overview">Panoramica consumo</button>
+    <button type="button" class="tab-btn" data-tab="budget" data-i18n="tab_budget">Budget&amp;Forecast</button>
+    <button type="button" class="tab-btn" data-tab="org" data-i18n="tab_org">Organization Budget</button>
+    <button type="button" class="tab-btn" data-tab="universal" data-i18n="tab_universal">Universal ULB</button>
+    <button type="button" class="tab-btn" data-tab="individual" data-i18n="tab_individual">Individual ULB</button>
+  </div>
+
   <div id="dashboard"></div>
+  <div id="panel-budget"></div>
+  <div id="panel-org"></div>
+  <div id="panel-universal"></div>
+  <div id="panel-individual"></div>
 
   <div class="footer" data-i18n="footer_local">Tutto il parsing avviene in locale · Chart.js + PapaParse via CDN</div>
 </div>
@@ -273,7 +322,14 @@ const state = {
   spendFactor: 1,     // <1 quando la promo riduce la spesa
   licBiz: null,       // override n. licenze Business (null = usa il conteggio attivo dal CSV)
   licEnt: null,       // override n. licenze Enterprise (null = usa il conteggio attivo dal CSV)
-  sort: { model: {col:'cost', dir:'desc'}, user: {col:'cost', dir:'desc'}, cc: {col:'cost', dir:'desc'} }
+  activeTab: 'overview', // tab attivo: 'overview' | 'universal' | 'individual'
+  ulbMode: 'top-10',  // cutoff power user Universal ULB: 'top-5' | 'top-10' | 'top-15' | 'custom'
+  ulbCustomPct: 10,   // percentuale cutoff personalizzata
+  ulbOverride: null,  // override manuale del valore Universal ULB (null = usa il suggerito)
+  indivBucket: null,  // filtro bucket istogramma Individual ULB
+  indivSearch: '',    // filtro testo tabella Individual ULB
+  orgBuffer: 10,      // margine % aggiunto all'overage proiettato (Organization Budget)
+  sort: { model: {col:'cost', dir:'desc'}, user: {col:'cost', dir:'desc'}, cc: {col:'cost', dir:'desc'}, indiv: {col:'util', dir:'desc'}, org: {col:'recommended', dir:'desc'} }
 };
 
 const REQUIRED_COLS = ['date','username','model','quantity','gross_amount'];
@@ -353,7 +409,84 @@ const T = {
     lic_input_hint:'Valori rilevati dagli utenti attivi nel CSV. Modificali per includere licenze GitHub Copilot non attive nel periodo: i loro crediti ampliano il pool condiviso.',
     lic_biz_label:'Licenze Business',
     lic_ent_label:'Licenze Enterprise',
-    lic_reset:'Ripristina dai dati'
+    lic_reset:'Ripristina dai dati',
+    tab_overview:'Panoramica consumo', tab_universal:'Universal ULB', tab_individual:'Individual ULB',
+    ulb_title:'Universal ULB — dimensiona il cap universale',
+    ulb_subtitle:'Stima un singolo budget per-utente (ULB universale) dal consumo reale del CSV. Gli utenti più intensivi (power user) restano sopra la soglia e andrebbero gestiti con ULB individuali.',
+    ulb_no_data:'Nessun dato di consumo per-utente. Carica un CSV con le colonne username e quantity.',
+    ulb_cutoff_label:'Soglia power user',
+    ulb_cutoff_hint:'Percentuale di utenti più intensivi esclusi dall’ULB universale: riceveranno un ULB individuale più alto.',
+    ulb_custom:'Personalizzata', ulb_custom_pct:'Percentuale',
+    ulb_kpi_suggested:'Universal ULB suggerito', ulb_kpi_suggested_sub:'P95 dei regular user (crediti/mese)',
+    ulb_kpi_power:'Power user', ulb_kpi_power_sub:'sopra la soglia',
+    ulb_kpi_power_share:'Quota AIC dei power user', ulb_kpi_power_share_sub:'sul consumo totale',
+    ulb_kpi_power_budget:'Budget individuale suggerito', ulb_kpi_power_budget_sub:'mediana dei power user',
+    ulb_kpi_threshold:'Soglia di taglio', ulb_kpi_threshold_sub:'crediti al cutoff scelto',
+    ulb_curve_title:'Curva di consumo — utenti ordinati per consumo',
+    ulb_legend_power:'Power user (≥ soglia)', ulb_legend_regular:'Regular user (< soglia)',
+    ulb_legend_cutoff:'Soglia power user', ulb_legend_ulb:'Universal ULB', ulb_legend_consumption:'Consumo',
+    ulb_size_title:'Dimensiona l’Universal ULB', ulb_size_label:'Universal ULB (modificabile)', ulb_reset:'Valore suggerito',
+    ulb_coverage_lbl:'regular user coperti dall’ULB',
+    ulb_coverage_foot:(c,tot,b)=>`${c} di ${tot} regular user entro il cap · ${b} oltre il cap (verrebbero bloccati)`,
+    ulb_th_consumption:'Consumo', ulb_th_quota:'Quota', ulb_th_share:'% totale', ulb_th_suggested:'ULB individuale',
+    ulb_table_title:'Power user → candidati a ULB individuale',
+    indiv_title:'Individual ULB — utilizzo della quota per utente',
+    indiv_subtitle:'Utilizzo (consumo / quota mensile) per ogni utente, con stato e istogramma. Il cap individuale è mappato sulla quota mensile inclusa.',
+    indiv_no_data:'Nessuna quota per-utente nel CSV (colonna total_monthly_quota). Questo tab richiede dati di quota.',
+    indiv_kpi_users:'Utenti con quota', indiv_kpi_users_sub:'username con quota > 0',
+    indiv_kpi_over:'Oltre quota (≥100%)', indiv_kpi_near:'Vicini al limite (80–99%)', indiv_kpi_ok:'Entro quota (<80%)',
+    indiv_kpi_budgeted:'Quota totale assegnata', indiv_kpi_budgeted_sub:'crediti/mese (somma quote)',
+    indiv_kpi_consumed:'Consumo totale', indiv_kpi_consumed_sub:'della quota totale',
+    indiv_hist_title:'Distribuzione dell’utilizzo', indiv_hist_x:'Utilizzo (%)', indiv_hist_y:'Utenti',
+    indiv_table_title:'Utenti per utilizzo della quota',
+    indiv_th_budget:'Quota', indiv_th_consumed:'Consumo', indiv_th_util:'Utilizzo', indiv_th_status:'Stato',
+    indiv_search:'Cerca utente…', indiv_clear:'Rimuovi filtro',
+    st_over:'Oltre', st_near:'Vicino', st_ok:'OK',
+    tab_budget:'Budget&Forecast', tab_org:'Organization Budget',
+    bf_title:'Budget & Forecast — spesa proiettata a fine mese',
+    bf_subtitle:'Spesa attuale, proiezione di fine mese e drawdown del pool di AI credits. La proiezione stima il trend con una regressione lineare sul consumo giornaliero di tutti i giorni disponibili nel CSV e lo estende fino a fine mese (fallback alla media giornaliera se i dati sono troppo scarsi).',
+    bf_no_data:'Nessun dato disponibile. Carica un CSV.',
+    bf_kpi_mtd:'Spesa MTD', bf_kpi_mtd_sub:(d,tot)=>`Giorno ${d} di ${tot}`,
+    bf_kpi_eom:'Forecast fine mese', bf_kpi_eom_over:c=>`${c} proiettati oltre il pool`, bf_kpi_eom_within:'Resta entro il pool',
+    bf_kpi_pool:'Valore del pool', bf_kpi_pool_sub:'crediti inclusi @ $0,01',
+    bf_kpi_remaining:'Pool residuo', bf_kpi_remaining_sub:p=>`${p} del pool consumato`,
+    bf_kpi_risk:'A rischio a fine mese', bf_kpi_risk_sub:(a,p)=>`${a} gi\u00e0 oltre \u00b7 ${p} proiettati oltre`,
+    bf_lowconf:'pochi giorni di dati: proiezione poco affidabile',
+    bf_burnup_title:'Burn-up — spesa cumulata vs proiezione vs pool', bf_burnup_x:'Giorno del mese',
+    bf_legend_actual:'Spesa cumulata', bf_legend_proj:'Proiezione fine mese', bf_legend_pool:'Valore del pool',
+    bf_pool_draw_title:'Drawdown del pool di AI credits',
+    bf_risk_title:'Utenti a rischio — proiezione vs quota',
+    bf_th_mtd:'Consumo MTD', bf_th_rate:'Burn/giorno', bf_th_proj:'Proiezione', bf_th_status:'Stato',
+    bf_status_over:'Gi\u00e0 oltre', bf_status_proj:'Proiettato oltre', bf_status_ok:'OK',
+    bf_risk_none:'Nessun utente proiettato oltre la propria quota a fine mese.',
+    org_title:'Organization Budget — quale budget impostare per organizzazione',
+    org_subtitle:'Riadatta la logica dell\u2019Enterprise Budget al livello di organizzazione. Un budget di organizzazione limita le spese metered (oltre il pool) per gli utenti fatturati all\u2019org, dopo l\u2019esaurimento dell\u2019allowance inclusa. Imposta il budget a livello di org, non enterprise.',
+    org_no_data:'Nessuna organizzazione rilevata. Carica CSV con nome file per organizzazione (es. AIUsageReport_<Org>\u2026).',
+    org_ref_title:'Regole di billing (documentazione GitHub)',
+    org_ref_credit:'1 AI credit = $0,01 USD. Allowance inclusa per licenza al mese:',
+    org_ref_biz:'Copilot Business: 1.900 crediti (3.000 in promo Giu–Set 2026)',
+    org_ref_ent:'Copilot Enterprise: 3.900 crediti (7.000 in promo Giu–Set 2026)',
+    org_ref_levels:'Il budget di organizzazione limita le spese metered degli utenti fatturati all\u2019org, dopo l\u2019esaurimento del pool condiviso. Livelli: utente \u00b7 cost center \u00b7 organizzazione \u00b7 enterprise.',
+    ulb_note:'L’ULB universale è il default applicato a tutti gli utenti licenziati; gli ULB individuali lo sovrascrivono per i power user. È l’unico controllo attivo sia nella fase pool sia in quella metered ed è sempre un hard stop (un budget di $0 blocca subito l’utente).',
+    indiv_note:'Il CSV non contiene gli ULB configurati: come riferimento si usa l’allowance mensile inclusa (contributo al pool). Un ULB reale può essere impostato più alto o più basso della quota inclusa ed è un hard stop attivo sia nella fase pool sia in quella metered.',
+    bf_note:'Il consumo entro il valore del pool è già coperto dalle licenze; solo l’overage oltre il pool diventa spesa metered ($0,01/credito), l’unica limitata dai budget di cost center/organizzazione/enterprise. «A rischio» = proiezione oltre l’allowance inclusa (spill su surplus del pool o metered), non necessariamente bloccato: il blocco dipende dall’ULB e dai tetti budget attivi. Le proiezioni per-utente e per-organizzazione applicano lo stesso fattore di crescita del trend aggregato.',
+    org_ref_flow:'Ordine di valutazione di ogni richiesta: 1) ULB per-utente (hard stop sempre attivo) → 2) pool condiviso (gratis finché disponibile) → 3) budget di cost center / organizzazione / enterprise (solo fase metered, dopo il pool).',
+    org_ref_hardstop:'«Interrompi l’utilizzo al raggiungimento del limite» è DISATTIVO per default sui budget di org/CC/enterprise: senza, la spesa continua oltre il limite. Attivalo per un tetto effettivo (gli ULB sono invece sempre hard stop).',
+    org_ref_restrict:'Un budget di organizzazione può solo restringere ulteriormente sotto il budget enterprise, non superarlo. È l’unico controllo disponibile per gli owner di organizzazione.',
+    org_ref_multiorg:'Se un utente ha licenze da più organizzazioni, GitHub sceglie casualmente l’org da addebitare ogni ciclo: assegna una sola licenza per utente (o usa i cost center) per un enforcement prevedibile.',
+    org_ref_nottotal:'Il budget non è la spesa totale: tetto massimo = costo licenze + budget metered. Il consumo entro il pool è già coperto dalle licenze.',
+    org_ref_link:'Apri la documentazione ↗',
+    org_buffer_label:'Margine di sicurezza', org_buffer_hint:'Percentuale aggiunta all\u2019overage proiettato per assorbire la crescita d\u2019uso (come il growth buffer del repo).',
+    org_kpi_orgs:'Organizzazioni', org_kpi_orgs_sub:'rilevate dai dati',
+    org_kpi_pool:'Pool incluso totale', org_kpi_pool_sub:'allowance di tutte le org',
+    org_kpi_consumed:'Consumo totale', org_kpi_consumed_sub:'MTD, tutte le org',
+    org_kpi_budget:'Budget org consigliato', org_kpi_budget_sub:'somma overage proiettato + margine',
+    org_kpi_need:'Org che necessitano budget', org_kpi_need_sub:'overage proiettato > 0',
+    org_chart_title:'Pool incluso vs spesa proiettata per organizzazione',
+    org_legend_pool:'Pool incluso (USD)', org_legend_proj:'Spesa proiettata (USD)',
+    org_table_title:'Budget consigliato per organizzazione',
+    org_th_org:'Organizzazione', org_th_seats:'Licenze', org_th_pool:'Pool incluso', org_th_consumed:'Consumo MTD', org_th_proj:'Proiezione', org_th_util:'Utilizzo pool', org_th_overage:'Overage proiettato', org_th_budget:'Budget consigliato', org_th_status:'Stato',
+    org_status_over:'Oltre il pool', org_status_proj:'Proiettato oltre', org_status_ok:'Entro il pool'
   },
   en: {
     intro:'Upload one or more <code>AIUsageReport_*.csv</code> with the columns <code>date, username, model, quantity, gross_amount, cost_center_name…</code>. The analysis runs entirely in your browser, no data is uploaded online.',
@@ -408,7 +541,84 @@ const T = {
     lic_input_hint:'Values detected from active users in the CSV. Edit them to include GitHub Copilot licenses that were inactive during the period: their credits expand the shared pool.',
     lic_biz_label:'Business licenses',
     lic_ent_label:'Enterprise licenses',
-    lic_reset:'Reset from data'
+    lic_reset:'Reset from data',
+    tab_overview:'Consumption overview', tab_universal:'Universal ULB', tab_individual:'Individual ULB',
+    ulb_title:'Universal ULB — size the universal cap',
+    ulb_subtitle:'Estimate a single per-user budget (universal ULB) from real CSV usage. The heaviest users (power users) stay above the cutoff and should be managed with individual ULBs.',
+    ulb_no_data:'No per-user consumption data. Upload a CSV with username and quantity columns.',
+    ulb_cutoff_label:'Power-user cutoff',
+    ulb_cutoff_hint:'Percentage of heaviest users excluded from the universal ULB: they get a higher individual ULB instead.',
+    ulb_custom:'Custom', ulb_custom_pct:'Percentage',
+    ulb_kpi_suggested:'Suggested Universal ULB', ulb_kpi_suggested_sub:'P95 of regular users (credits/month)',
+    ulb_kpi_power:'Power users', ulb_kpi_power_sub:'above the cutoff',
+    ulb_kpi_power_share:"Power users' AIC share", ulb_kpi_power_share_sub:'of total consumption',
+    ulb_kpi_power_budget:'Suggested individual budget', ulb_kpi_power_budget_sub:'median of power users',
+    ulb_kpi_threshold:'Cutoff threshold', ulb_kpi_threshold_sub:'credits at the chosen cutoff',
+    ulb_curve_title:'Consumption curve — users sorted by consumption',
+    ulb_legend_power:'Power users (≥ cutoff)', ulb_legend_regular:'Regular users (< cutoff)',
+    ulb_legend_cutoff:'Power-user cutoff', ulb_legend_ulb:'Universal ULB', ulb_legend_consumption:'Consumption',
+    ulb_size_title:'Size the Universal ULB', ulb_size_label:'Universal ULB (editable)', ulb_reset:'Suggested value',
+    ulb_coverage_lbl:'regular users covered by the ULB',
+    ulb_coverage_foot:(c,tot,b)=>`${c} of ${tot} regular users within the cap · ${b} beyond the cap (would be blocked)`,
+    ulb_th_consumption:'Consumption', ulb_th_quota:'Quota', ulb_th_share:'% total', ulb_th_suggested:'Individual ULB',
+    ulb_table_title:'Power users → candidates for individual ULB',
+    indiv_title:'Individual ULB — quota utilization per user',
+    indiv_subtitle:'Utilization (consumption / monthly quota) per user, with status and histogram. The individual cap is mapped to the included monthly quota.',
+    indiv_no_data:'No per-user quota in the CSV (total_monthly_quota column). This tab requires quota data.',
+    indiv_kpi_users:'Users with quota', indiv_kpi_users_sub:'usernames with quota > 0',
+    indiv_kpi_over:'Over quota (≥100%)', indiv_kpi_near:'Near the limit (80–99%)', indiv_kpi_ok:'Within quota (<80%)',
+    indiv_kpi_budgeted:'Total assigned quota', indiv_kpi_budgeted_sub:'credits/month (sum of quotas)',
+    indiv_kpi_consumed:'Total consumption', indiv_kpi_consumed_sub:'of total quota',
+    indiv_hist_title:'Utilization distribution', indiv_hist_x:'Utilization (%)', indiv_hist_y:'Users',
+    indiv_table_title:'Users by quota utilization',
+    indiv_th_budget:'Quota', indiv_th_consumed:'Consumption', indiv_th_util:'Utilization', indiv_th_status:'Status',
+    indiv_search:'Search user…', indiv_clear:'Clear filter',
+    st_over:'Over', st_near:'Near', st_ok:'OK',
+    tab_budget:'Budget&Forecast', tab_org:'Organization Budget',
+    bf_title:'Budget & Forecast — projected end-of-month spend',
+    bf_subtitle:'Current spend, end-of-month projection and AI credit pool drawdown. The projection estimates the trend with a linear regression on the daily consumption of all available days in the CSV and extends it to end of month (falling back to the daily average when data is too sparse).',
+    bf_no_data:'No data available. Upload a CSV.',
+    bf_kpi_mtd:'Spend MTD', bf_kpi_mtd_sub:(d,tot)=>`Day ${d} of ${tot}`,
+    bf_kpi_eom:'End-of-month forecast', bf_kpi_eom_over:c=>`${c} projected beyond the pool`, bf_kpi_eom_within:'Stays within the pool',
+    bf_kpi_pool:'Pool value', bf_kpi_pool_sub:'included credits @ $0.01',
+    bf_kpi_remaining:'Pool remaining', bf_kpi_remaining_sub:p=>`${p} of pool drawn`,
+    bf_kpi_risk:'At risk by EoM', bf_kpi_risk_sub:(a,p)=>`${a} already over \u00b7 ${p} projected over`,
+    bf_lowconf:'few days of data: projection is noisy',
+    bf_burnup_title:'Burn-up — cumulative spend vs projection vs pool', bf_burnup_x:'Day of month',
+    bf_legend_actual:'Cumulative spend', bf_legend_proj:'End-of-month projection', bf_legend_pool:'Pool value',
+    bf_pool_draw_title:'AI credit pool drawdown',
+    bf_risk_title:'Users at risk — projection vs quota',
+    bf_th_mtd:'Consumption MTD', bf_th_rate:'Burn/day', bf_th_proj:'Projection', bf_th_status:'Status',
+    bf_status_over:'Already over', bf_status_proj:'Projected over', bf_status_ok:'OK',
+    bf_risk_none:'No user is projected over their quota by end of month.',
+    org_title:'Organization Budget — what budget to set per organization',
+    org_subtitle:'Re-maps the Enterprise Budget logic to the organization level. An organization budget caps metered charges (beyond the pool) for users billed to the org, after the included allowance is exhausted. Set the budget at the org level, not enterprise.',
+    org_no_data:'No organization detected. Upload CSVs with a per-organization file name (e.g. AIUsageReport_<Org>\u2026).',
+    org_ref_title:'Billing rules (GitHub documentation)',
+    org_ref_credit:'1 AI credit = $0.01 USD. Included allowance per license per month:',
+    org_ref_biz:'Copilot Business: 1,900 credits (3,000 during the Jun–Sep 2026 promo)',
+    org_ref_ent:'Copilot Enterprise: 3,900 credits (7,000 during the Jun–Sep 2026 promo)',
+    org_ref_levels:'The organization budget caps metered charges for users billed to the org, after the shared pool is exhausted. Levels: user \u00b7 cost center \u00b7 organization \u00b7 enterprise.',
+    ulb_note:'The universal ULB is the default applied to every licensed user; individual ULBs override it for power users. It is the only control active in both the pool and metered phases and is always a hard stop (a $0 budget blocks the user immediately).',
+    indiv_note:'The CSV does not contain configured ULBs: the included monthly allowance (pool contribution) is used as the reference. A real ULB can be set higher or lower than the included quota and is a hard stop active in both the pool and metered phases.',
+    bf_note:'Consumption within the pool value is already covered by license fees; only the overage beyond the pool becomes metered spend ($0.01/credit), the only part capped by cost center/organization/enterprise budgets. "At risk" = projected beyond the included allowance (spilling into pool surplus or metered), not necessarily blocked: blocking depends on the ULB and active budget hard caps. Per-user and per-organization projections apply the same growth factor as the aggregate trend.',
+    org_ref_flow:'Evaluation order for each request: 1) per-user ULB (always a hard stop) → 2) shared pool (free while available) → 3) cost center / organization / enterprise budget (metered phase only, after the pool).',
+    org_ref_hardstop:'"Stop usage when budget limit is reached" is OFF by default for org/CC/enterprise budgets: without it, spend continues past the limit. Enable it for an effective cap (ULBs are always a hard stop).',
+    org_ref_restrict:'An organization budget can only further restrict below the enterprise budget, never exceed it. It is the only control available to organization owners.',
+    org_ref_multiorg:'If a user has licenses from multiple organizations, GitHub picks the billed org at random each cycle: assign a single license per user (or use cost centers) for predictable enforcement.',
+    org_ref_nottotal:'The budget is not total spend: maximum bill = license fees + metered budget. Consumption within the pool is already covered by licenses.',
+    org_ref_link:'Open the documentation ↗',
+    org_buffer_label:'Safety margin', org_buffer_hint:'Percentage added to the projected overage to absorb usage growth (like the repo growth buffer).',
+    org_kpi_orgs:'Organizations', org_kpi_orgs_sub:'detected from data',
+    org_kpi_pool:'Total included pool', org_kpi_pool_sub:'allowance across all orgs',
+    org_kpi_consumed:'Total consumption', org_kpi_consumed_sub:'MTD, all orgs',
+    org_kpi_budget:'Recommended org budget', org_kpi_budget_sub:'sum of projected overage + margin',
+    org_kpi_need:'Orgs needing a budget', org_kpi_need_sub:'projected overage > 0',
+    org_chart_title:'Included pool vs projected spend per organization',
+    org_legend_pool:'Included pool (USD)', org_legend_proj:'Projected spend (USD)',
+    org_table_title:'Recommended budget per organization',
+    org_th_org:'Organization', org_th_seats:'Licenses', org_th_pool:'Included pool', org_th_consumed:'Consumption MTD', org_th_proj:'Projection', org_th_util:'Pool utilization', org_th_overage:'Projected overage', org_th_budget:'Recommended budget', org_th_status:'Status',
+    org_status_over:'Over the pool', org_status_proj:'Projected over', org_status_ok:'Within the pool'
   }
 };
 const L = () => T[state.lang];
@@ -469,7 +679,7 @@ function applyDiscount(){
   if (!Number.isFinite(v)) v = 0;
   v = Math.min(100, Math.max(0, v));
   state.discount = en ? v / 100 : 0;
-  if (state.rows.length) rebuildDashboard();
+  if (state.rows.length) refresh();
 }
 $('#discount-toggle').addEventListener('change', applyDiscount);
 $('#discount-input').addEventListener('input', applyDiscount);
@@ -479,7 +689,7 @@ function setFormat(loc){
   state.numLocale = loc;
   $('#fmt-us').classList.toggle('active', loc === 'en-US');
   $('#fmt-eu').classList.toggle('active', loc === 'it-IT');
-  if (state.rows.length) rebuildDashboard();
+  if (state.rows.length) refresh();
 }
 $('#fmt-us').addEventListener('click', () => setFormat('en-US'));
 $('#fmt-eu').addEventListener('click', () => setFormat('it-IT'));
@@ -490,7 +700,7 @@ function setLang(lang){
   $('#lang-it').classList.toggle('active', lang === 'it');
   $('#lang-en').classList.toggle('active', lang === 'en');
   applyLang();
-  if (state.rows.length) rebuildDashboard();
+  if (state.rows.length) refresh();
 }
 $('#lang-it').addEventListener('click', () => setLang('it'));
 $('#lang-en').addEventListener('click', () => setLang('en'));
@@ -499,7 +709,7 @@ applyLang();
 // Promo Giu-Ago: crediti omaggio che ampliano il pool e riducono la spesa
 $('#promo-toggle').addEventListener('change', e => {
   state.promo = e.target.checked;
-  if (state.rows.length) rebuildDashboard();
+  if (state.rows.length) refresh();
 });
 
 function handleFiles(files){
@@ -522,7 +732,7 @@ function handleFiles(files){
           entry.rows = data.length;
           state.rows.push(...data);
           renderFiles();
-          rebuildDashboard();
+          refresh();
         } catch (err) {
           entry.status = 'error';
           entry.error = err.message;
@@ -568,15 +778,14 @@ function removeFile(idx){
     state.rows = state.rows.filter(r => r.__source_file !== f.name);
   }
   renderFiles();
-  rebuildDashboard();
+  refresh();
 }
 
 $('#btn-clear').addEventListener('click', () => {
   state.files = []; state.rows = [];
+  state.indivBucket = null; state.indivSearch = ''; state.ulbOverride = null;
   renderFiles();
-  $('#dashboard').classList.remove('visible');
-  $('#dashboard').innerHTML = '';
-  destroyCharts();
+  refresh();
 });
 
 $('#btn-export').addEventListener('click', () => {
@@ -603,6 +812,7 @@ function aggregate(rows){
   const byDate  = new Map();    // date -> cost
   const byDateModel = new Map();// date -> Map(model_base -> cost)
   const byOrgFile = new Map();  // file -> cost
+  const byOrg = new Map();      // org -> {cost, qty, users:Map(user->{qty,quota})}
   const byCC = new Map();       // cost_center -> {cost, users:Set}
   const byUser = new Map();     // username -> {cost, qty, models:Set}
 
@@ -642,6 +852,15 @@ function aggregate(rows){
 
     byOrgFile.set(org, (byOrgFile.get(org)||0) + cost);
 
+    let o = byOrg.get(org);
+    if (!o) { o = {cost:0, qty:0, users:new Map()}; byOrg.set(org, o); }
+    o.cost += cost; o.qty += qty;
+    if (user) {
+      let ou = o.users.get(user);
+      if (!ou) { ou = {qty:0, quota:0}; o.users.set(user, ou); }
+      ou.qty += qty; if (quota > ou.quota) ou.quota = quota;
+    }
+
     let ccr = byCC.get(cc);
     if (!ccr) { ccr = {cost:0, users:new Set()}; byCC.set(cc, ccr); }
     ccr.cost += cost; if (user) ccr.users.add(user);
@@ -674,8 +893,22 @@ function aggregate(rows){
     username:k, cost: round(v.cost,4), qty: round(v.qty,2), models: v.models.size
   })).sort((a,b) => b.cost - a.cost);
 
+  const licOfQuota = q => q >= 3900 ? 'Enterprise' : 'Business';
+  const userDetailArr = [...byUser.entries()].map(([k,v]) => ({
+    username:k, cost: round(v.cost,4), qty: round(v.qty,2), models: v.models.size,
+    quota: v.quota, license: licOfQuota(v.quota), cc: v.cc
+  })).sort((a,b) => b.qty - a.qty);
+
   const orgArr = [...byOrgFile.entries()].map(([k,v]) => ({org_file:k, gross_amount: round(v,4)}))
     .sort((a,b) => b.gross_amount - a.gross_amount);
+
+  const orgDetailArr = [...byOrg.entries()].map(([k,v]) => {
+    let poolCr = 0, nBiz = 0, nEnt = 0;
+    for (const [,u] of v.users) {
+      if (u.quota > 0) { poolCr += u.quota; if (u.quota >= 3900) nEnt++; else nBiz++; }
+    }
+    return { org:k, cost: round(v.cost,4), qty: round(v.qty,2), users: v.users.size, pool_credits: poolCr, n_business: nBiz, n_enterprise: nEnt };
+  }).sort((a,b) => b.qty - a.qty);
 
   // ---- Pool di AI credits (base + variante promo Giu-Ago) ----
   const pool = computePool(byUser, 0, 0, state.licBiz, state.licEnt);
@@ -698,7 +931,9 @@ function aggregate(rows){
     by_cost_center: ccArr,
     top_users: userArr.slice(0,25),
     all_users: userArr,
+    users_detail: userDetailArr,
     by_org_file: orgArr,
+    org_detail: orgDetailArr,
     pool,
     poolPromo
   };
@@ -810,13 +1045,10 @@ function rebuildDashboard(){
   const dash = $('#dashboard');
   if (!state.rows.length) { dash.classList.remove('visible'); dash.innerHTML=''; return; }
 
-  const agg = aggregate(state.rows);
-  state.lastAgg = agg;
+  const agg = computeAgg();
   const s = agg.summary;
   // Promo Giu-Ago: pool ampliato e spesa ridotta dei crediti omaggio (overage eliminato)
   const P = state.promo ? (agg.poolPromo || agg.pool) : agg.pool;
-  const promoSavings = (agg.pool && agg.poolPromo) ? (agg.pool.overage_usd - agg.poolPromo.overage_usd) : 0;
-  state.spendFactor = (state.promo && s.total_cost > 0) ? (s.total_cost - promoSavings) / s.total_cost : 1;
 
   dash.innerHTML = `
     <div class="kpis">
@@ -1270,6 +1502,795 @@ function renderPool(P, C){
       <td class="num">${fmtUSD(r.beyond_pool_usd)}</td>
     </tr>`;
   }).join('');
+}
+
+// ============================================================
+// Navigazione a tab + dispatcher di refresh
+// ============================================================
+document.querySelectorAll('#tabbar .tab-btn').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+// Calcola gli aggregati una sola volta e aggiorna spendFactor (promo)
+function computeAgg(){
+  const agg = aggregate(state.rows);
+  state.lastAgg = agg;
+  const s = agg.summary;
+  const promoSavings = (agg.pool && agg.poolPromo) ? (agg.pool.overage_usd - agg.poolPromo.overage_usd) : 0;
+  state.spendFactor = (state.promo && s.total_cost > 0) ? (s.total_cost - promoSavings) / s.total_cost : 1;
+  return agg;
+}
+
+// Mostra/aggiorna il tab attivo; gestisce la visibilità della tab bar
+function refresh(){
+  const has = state.rows.length > 0;
+  const tb = $('#tabbar');
+  if (tb) tb.style.display = has ? 'flex' : 'none';
+  if (!has){
+    destroyCharts();
+    const d = $('#dashboard'); d.classList.remove('visible'); d.innerHTML = ''; d.style.display = '';
+    const pb = $('#panel-budget'); if (pb){ pb.innerHTML = ''; pb.style.display = 'none'; }
+    const po = $('#panel-org'); if (po){ po.innerHTML = ''; po.style.display = 'none'; }
+    const pu = $('#panel-universal'); if (pu){ pu.innerHTML = ''; pu.style.display = 'none'; }
+    const pi = $('#panel-individual'); if (pi){ pi.innerHTML = ''; pi.style.display = 'none'; }
+    return;
+  }
+  showTab(state.activeTab);
+}
+
+function showTab(tab){
+  state.activeTab = tab;
+  document.querySelectorAll('#tabbar .tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  destroyCharts();
+  const d = $('#dashboard'), pb = $('#panel-budget'), po = $('#panel-org'), pu = $('#panel-universal'), pi = $('#panel-individual');
+  d.style.display  = tab === 'overview'   ? '' : 'none';
+  pb.style.display = tab === 'budget'     ? 'grid' : 'none';
+  po.style.display = tab === 'org'        ? 'grid' : 'none';
+  pu.style.display = tab === 'universal'  ? 'grid' : 'none';
+  pi.style.display = tab === 'individual' ? 'grid' : 'none';
+  if (tab === 'overview') rebuildDashboard();
+  else if (tab === 'budget') rebuildBudgetForecast();
+  else if (tab === 'org') rebuildOrgBudget();
+  else if (tab === 'universal') rebuildUniversalUlb();
+  else rebuildIndividualUlb();
+}
+
+// Colori dal tema corrente + default Chart.js
+function themeColors(){
+  const css = getComputedStyle(document.documentElement);
+  const C = {
+    text:   css.getPropertyValue('--cp-text').trim(),
+    muted:  css.getPropertyValue('--cp-text-muted').trim(),
+    border: css.getPropertyValue('--cp-border').trim(),
+    accent: css.getPropertyValue('--cp-accent').trim(),
+  };
+  Chart.defaults.color = C.muted;
+  Chart.defaults.borderColor = C.border;
+  Chart.defaults.font.family = '"Segoe UI", Aptos, Calibri, -apple-system, sans-serif';
+  return C;
+}
+
+function hexA(hex, a){
+  const h = hex.replace('#','');
+  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ============================================================
+// Universal ULB — porting di consumptionAnalysis.ts (xrvk/ubb-dashboard)
+// Dimensiona un singolo cap per-utente dalla distribuzione di consumo.
+// ============================================================
+function pctile(sorted, p){
+  if (!sorted.length) return 0;
+  if (sorted.length === 1) return sorted[0];
+  const idx = (p/100) * (sorted.length - 1);
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+// Utenti con consumo > 0 dal dettaglio per-utente
+function ulbUsers(){
+  return (state.lastAgg.users_detail || []).filter(u => u.qty > 0).map(u => ({
+    login: u.username, aics: u.qty, gross: u.cost, quota: u.quota, license: u.license, cc: u.cc
+  }));
+}
+
+// Soglia di consumo al cutoff scelto (Top 5/10/15% o personalizzato)
+function ulbThreshold(users, mode, customPct){
+  const sortedDesc = [...users].sort((a,b) => b.aics - a.aics);
+  let pct = mode === 'top-5' ? 5 : mode === 'top-10' ? 10 : mode === 'top-15' ? 15 : (customPct ?? 0);
+  pct = Math.max(0, Math.min(100, pct));
+  if (mode === 'custom' && pct <= 0) return sortedDesc[0].aics + 1;
+  const count = Math.max(1, Math.ceil(sortedDesc.length * (pct/100)));
+  return sortedDesc[Math.min(count, sortedDesc.length) - 1].aics;
+}
+
+function ulbAnalysis(users, mode, customPct){
+  const thresholdAICs = ulbThreshold(users, mode, customPct);
+  const total = users.reduce((s,u) => s + u.aics, 0);
+  const power = users.filter(u => u.aics >= thresholdAICs).sort((a,b) => b.aics - a.aics);
+  const regular = users.filter(u => u.aics < thresholdAICs);
+  const powerAics = power.reduce((s,u) => s + u.aics, 0);
+  const powerShare = total > 0 ? powerAics / total : 0;
+  const powerSorted = power.map(u => u.aics).sort((a,b) => a - b);
+  const regularSorted = regular.map(u => u.aics).sort((a,b) => a - b);
+  // Universal ULB = P95 dei regular user: copre la maggioranza senza gonfiare il cap fino all'outlier.
+  const suggestedULB = regularSorted.length ? Math.ceil(pctile(regularSorted, 95)) : 0;
+  // Budget individuale suggerito per i power user = mediana del gruppo power.
+  const suggestedPowerBudget = powerSorted.length ? Math.ceil(pctile(powerSorted, 50)) : 0;
+  return { thresholdAICs, power, regular, powerShare, suggestedULB, suggestedPowerBudget, total };
+}
+
+function ulbStats(users){
+  const sorted = users.map(u => u.aics).sort((a,b) => a - b);
+  const n = sorted.length;
+  if (!n) return { n:0, total:0, mean:0, median:0, p75:0, p90:0, max:0, stddev:0 };
+  const total = sorted.reduce((s,v) => s + v, 0);
+  const mean = total / n;
+  const variance = sorted.reduce((s,v) => s + (v - mean) ** 2, 0) / n;
+  return { n, total, mean, median: pctile(sorted,50), p75: pctile(sorted,75), p90: pctile(sorted,90), max: sorted[n-1], stddev: Math.sqrt(variance) };
+}
+
+function rebuildUniversalUlb(){
+  computeAgg();
+  const panel = $('#panel-universal');
+  const users = ulbUsers();
+  if (!users.length){ panel.innerHTML = `<div class="card"><div class="notice">${t('ulb_no_data')}</div></div>`; return; }
+
+  const mode = state.ulbMode || 'top-10';
+  const customPct = state.ulbCustomPct ?? 10;
+  const A = ulbAnalysis(users, mode, customPct);
+  const ulb = state.ulbOverride != null ? state.ulbOverride : A.suggestedULB;
+  const regularCovered = A.regular.filter(u => u.aics <= ulb).length;
+  const coveragePct = A.regular.length ? regularCovered / A.regular.length * 100 : 0;
+  const blocked = A.regular.length - regularCovered;
+
+  panel.innerHTML = `
+    <div class="section-head"><h2>${t('ulb_title')}</h2><p>${t('ulb_subtitle')}</p></div>
+    <div class="notice">${t('ulb_note')}</div>
+
+    <div class="card ulb-controls">
+      <div class="ulb-ctrl-head"><b>${t('ulb_cutoff_label')}</b><span>${t('ulb_cutoff_hint')}</span></div>
+      <div class="ulb-ctrl-row">
+        <div class="segmented" id="ulb-mode">
+          <button type="button" class="seg-btn" data-mode="top-5">Top 5%</button>
+          <button type="button" class="seg-btn" data-mode="top-10">Top 10%</button>
+          <button type="button" class="seg-btn" data-mode="top-15">Top 15%</button>
+          <button type="button" class="seg-btn" data-mode="custom">${t('ulb_custom')}</button>
+        </div>
+        <label class="ulb-custom" id="ulb-custom-wrap">${t('ulb_custom_pct')} <span class="num-field"><input type="number" id="ulb-custom-input" min="0" max="100" step="1"><span class="pct">%</span></span></label>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="card kpi"><div class="label">${t('ulb_kpi_suggested')}</div><div class="value ok">${fmtCr(A.suggestedULB)}</div><div class="sub">${t('ulb_kpi_suggested_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('ulb_kpi_power')}</div><div class="value">${fmtInt(A.power.length)}</div><div class="sub">${fmtPct(A.power.length/users.length*100)} · ${t('ulb_kpi_power_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('ulb_kpi_power_share')}</div><div class="value">${fmtPct(A.powerShare*100)}</div><div class="sub">${t('ulb_kpi_power_share_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('ulb_kpi_power_budget')}</div><div class="value">${fmtCr(A.suggestedPowerBudget)}</div><div class="sub">${t('ulb_kpi_power_budget_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('ulb_kpi_threshold')}</div><div class="value">${fmtCr(A.thresholdAICs)}</div><div class="sub">${t('ulb_kpi_threshold_sub')}</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card"><h2>${t('ulb_curve_title')}</h2><div class="chart-box tall"><canvas id="chart-ulb-curve"></canvas></div>
+        <div class="legend-inline">
+          <span><i style="background:#dc2626"></i> ${t('ulb_legend_power')}</span>
+          <span><i style="background:var(--cp-accent)"></i> ${t('ulb_legend_regular')}</span>
+          <span><i style="background:#f59e0b"></i> ${t('ulb_legend_cutoff')}</span>
+          <span><i style="background:#16a34a"></i> ${t('ulb_legend_ulb')}</span>
+        </div>
+      </div>
+      <div class="card ulb-size-card"><h2>${t('ulb_size_title')}</h2>
+        <div class="ulb-size-input">
+          <label>${t('ulb_size_label')} <span class="num-field"><input type="number" id="ulb-override-input" min="0" step="1" style="width:72px"></span></label>
+          <button type="button" id="ulb-reset" class="lic-reset">${t('ulb_reset')}</button>
+        </div>
+        <div class="ulb-coverage"><div class="ulb-cov-big ${blocked>0?'warn':'ok'}">${fmtPct(coveragePct)}</div><div class="ulb-cov-lbl">${t('ulb_coverage_lbl')}</div></div>
+        <div class="meter">
+          <div class="seg seg-pool" style="width:${coveragePct}%">${coveragePct>8?fmtInt(regularCovered):''}</div>
+          <div class="seg seg-over" style="width:${100-coveragePct}%">${(blocked>0 && (100-coveragePct)>8)?fmtInt(blocked):''}</div>
+        </div>
+        <div class="ulb-cov-foot">${L().ulb_coverage_foot(fmtInt(regularCovered), fmtInt(A.regular.length), fmtInt(blocked))}</div>
+      </div>
+    </div>
+
+    <div class="card"><h2>${t('ulb_table_title')}</h2>
+      <div class="scroll"><table id="tbl-ulb-power">
+        <thead><tr>
+          <th>${t('th_user')}</th><th>${t('th_license')}</th><th>${t('th_cc')}</th>
+          <th class="num">${t('ulb_th_consumption')}</th><th class="num">${t('ulb_th_quota')}</th>
+          <th class="num">${t('ulb_th_share')}</th><th class="num">${t('ulb_th_suggested')}</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  `;
+
+  const C = themeColors();
+
+  // Wiring controlli cutoff / override
+  document.querySelectorAll('#ulb-mode .seg-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+    b.onclick = () => { state.ulbMode = b.dataset.mode; state.ulbOverride = null; rebuildUniversalUlb(); };
+  });
+  const customInput = $('#ulb-custom-input');
+  customInput.value = customPct;
+  customInput.disabled = mode !== 'custom';
+  $('#ulb-custom-wrap').style.opacity = mode === 'custom' ? '1' : '.5';
+  customInput.onchange = () => {
+    let v = parseFloat(String(customInput.value).replace(',', '.'));
+    if (!Number.isFinite(v)) v = 10;
+    v = Math.max(0, Math.min(100, v));
+    state.ulbCustomPct = v; state.ulbOverride = null; rebuildUniversalUlb();
+  };
+  const ov = $('#ulb-override-input');
+  ov.value = ulb;
+  ov.onchange = () => {
+    let v = parseInt(ov.value, 10);
+    if (!Number.isFinite(v) || v < 0) v = A.suggestedULB;
+    state.ulbOverride = v; rebuildUniversalUlb();
+  };
+  $('#ulb-reset').onclick = () => { state.ulbOverride = null; rebuildUniversalUlb(); };
+
+  // Curva di consumo: barre per utente (ordinate) + linee soglia/ULB
+  const sortedAll = [...users].sort((a,b) => b.aics - a.aics);
+  const labels = sortedAll.map((_, i) => i + 1);
+  const colors = sortedAll.map(u => u.aics >= A.thresholdAICs ? '#dc2626' : C.accent);
+  state.charts.ulbCurve = new Chart($('#chart-ulb-curve'), {
+    data: {
+      labels,
+      datasets: [
+        { type:'bar', label: t('ulb_legend_consumption'), data: sortedAll.map(u => u.aics), backgroundColor: colors, borderWidth:0, order:3, categoryPercentage:1, barPercentage:1 },
+        { type:'line', label: t('ulb_legend_cutoff'), data: labels.map(() => A.thresholdAICs), borderColor:'#f59e0b', borderDash:[6,4], borderWidth:2, pointRadius:0, order:1 },
+        { type:'line', label: t('ulb_legend_ulb'), data: labels.map(() => ulb), borderColor:'#16a34a', borderDash:[6,4], borderWidth:2, pointRadius:0, order:0 }
+      ]
+    },
+    options: {
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{
+          title: items => '#' + items[0].label,
+          label: ctx => ctx.datasetIndex === 0 ? ` ${sortedAll[ctx.dataIndex].login}: ${fmtCr(ctx.parsed.y)} cr` : ` ${ctx.dataset.label}: ${fmtCr(ctx.parsed.y)} cr`
+        }}
+      },
+      scales:{ x:{ display:false, grid:{ display:false } }, y:{ ticks:{ callback: v => fmtCr(v) }, grid:{ color:C.border } } }
+    }
+  });
+
+  // Tabella power user (candidati a ULB individuale)
+  const maxA = Math.max(...A.power.map(u => u.aics), 1);
+  document.querySelector('#tbl-ulb-power tbody').innerHTML = A.power.map(u => {
+    const tag = u.quota > 0 ? (u.license === 'Enterprise' ? `<span class="tag ent">Enterprise</span>` : `<span class="tag biz">Business</span>`) : '—';
+    const share = A.total > 0 ? u.aics / A.total * 100 : 0;
+    return `
+      <tr>
+        <td class="bar-cell"><div class="bar" style="width:${u.aics/maxA*100}%"></div><span>${escapeHtml(u.login)}</span></td>
+        <td>${tag}</td>
+        <td>${escapeHtml(u.cc || '—')}</td>
+        <td class="num">${fmtCr(u.aics)}</td>
+        <td class="num">${u.quota > 0 ? fmtCr(u.quota) : '—'}</td>
+        <td class="num">${fmtPct(share)}</td>
+        <td class="num">${fmtCr(A.suggestedPowerBudget)}</td>
+      </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// Individual ULB — porting di status.ts + UtilizationHistogram.tsx
+// Utilizzo per-utente = consumo / quota mensile (cap individuale).
+// ============================================================
+const UTIL_BUCKETS = [
+  { id:'b0-50',   short:'0–50',   min:0,   max:0.5,      color:'#10b981' },
+  { id:'b50-80',  short:'50–80',  min:0.5, max:0.8,      color:'#059669' },
+  { id:'b80-90',  short:'80–90',  min:0.8, max:0.9,      color:'#f59e0b' },
+  { id:'b90-100', short:'90–100', min:0.9, max:1,        color:'#b45309' },
+  { id:'b100',    short:'100+',   min:1,   max:Infinity, color:'#dc2626' }
+];
+function utilRatio(u){ return u.quota > 0 ? u.qty / u.quota : (u.qty > 0 ? Infinity : 0); }
+function bucketOf(u){ const r = utilRatio(u); return UTIL_BUCKETS.find(c => r >= c.min && r < c.max) || UTIL_BUCKETS[UTIL_BUCKETS.length - 1]; }
+function indivStatus(u){ const r = utilRatio(u); if (r >= 1) return 'over'; if (r >= 0.8) return 'near'; return 'ok'; }
+
+function rebuildIndividualUlb(){
+  const agg = computeAgg();
+  const panel = $('#panel-individual');
+  const all = (agg.users_detail || []).filter(u => u.quota > 0);
+  if (!all.length){ panel.innerHTML = `<div class="card"><div class="notice">${t('indiv_no_data')}</div></div>`; return; }
+
+  let over = 0, near = 0, ok = 0, totBudget = 0, totCons = 0;
+  for (const u of all){ const s = indivStatus(u); if (s === 'over') over++; else if (s === 'near') near++; else ok++; totBudget += u.quota; totCons += u.qty; }
+  const counts = UTIL_BUCKETS.map(b => ({ ...b, count: 0 }));
+  for (const u of all){ counts[UTIL_BUCKETS.indexOf(bucketOf(u))].count++; }
+
+  panel.innerHTML = `
+    <div class="section-head"><h2>${t('indiv_title')}</h2><p>${t('indiv_subtitle')}</p></div>
+    <div class="notice">${t('indiv_note')}</div>
+
+    <div class="kpis">
+      <div class="card kpi"><div class="label">${t('indiv_kpi_users')}</div><div class="value">${fmtInt(all.length)}</div><div class="sub">${t('indiv_kpi_users_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('indiv_kpi_over')}</div><div class="value warn">${fmtInt(over)}</div><div class="sub">${fmtPct(over/all.length*100)}</div></div>
+      <div class="card kpi"><div class="label">${t('indiv_kpi_near')}</div><div class="value" style="color:var(--cp-warning)">${fmtInt(near)}</div><div class="sub">${fmtPct(near/all.length*100)}</div></div>
+      <div class="card kpi"><div class="label">${t('indiv_kpi_ok')}</div><div class="value ok">${fmtInt(ok)}</div><div class="sub">${fmtPct(ok/all.length*100)}</div></div>
+      <div class="card kpi"><div class="label">${t('indiv_kpi_budgeted')}</div><div class="value">${fmtCr(totBudget)}</div><div class="sub">${t('indiv_kpi_budgeted_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('indiv_kpi_consumed')}</div><div class="value">${fmtCr(totCons)}</div><div class="sub">${fmtPct(totBudget>0?totCons/totBudget*100:0)} ${t('indiv_kpi_consumed_sub')}</div></div>
+    </div>
+
+    <div class="card"><h2>${t('indiv_hist_title')}</h2><div class="chart-box"><canvas id="chart-indiv-hist"></canvas></div><div id="indiv-filter-note"></div></div>
+
+    <div class="card">
+      <div class="indiv-table-head"><h2>${t('indiv_table_title')}</h2><input type="text" id="indiv-search" class="indiv-search" placeholder="${t('indiv_search')}"></div>
+      <div class="scroll"><table id="tbl-indiv">
+        <thead><tr>
+          <th data-col="username">${t('th_user')}</th>
+          <th data-col="license">${t('th_license')}</th>
+          <th data-col="cc">${t('th_cc')}</th>
+          <th class="num" data-col="quota">${t('indiv_th_budget')}</th>
+          <th class="num" data-col="qty">${t('indiv_th_consumed')}</th>
+          <th class="num" data-col="util">${t('indiv_th_util')}</th>
+          <th data-col="status">${t('indiv_th_status')}</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  `;
+
+  const C = themeColors();
+
+  // Istogramma utilizzo (click sulle barre per filtrare la tabella)
+  state.charts.indivHist = new Chart($('#chart-indiv-hist'), {
+    type:'bar',
+    data:{ labels: counts.map(b => b.short), datasets:[{ data: counts.map(b => b.count), backgroundColor: counts.map(b => (state.indivBucket && state.indivBucket !== b.id) ? hexA(b.color, 0.35) : b.color), borderRadius:4 }]},
+    options:{
+      maintainAspectRatio:false,
+      onClick:(e, els) => { if (!els.length) return; const id = counts[els[0].index].id; state.indivBucket = state.indivBucket === id ? null : id; rebuildIndividualUlb(); },
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: ctx => ` ${fmtInt(ctx.parsed.y)}` }}},
+      scales:{ x:{ grid:{ display:false }, title:{ display:true, text: t('indiv_hist_x'), color:C.muted } }, y:{ ticks:{ callback: v => fmtInt(v) }, grid:{ color:C.border }, title:{ display:true, text: t('indiv_hist_y'), color:C.muted } } }
+    }
+  });
+
+  // Nota filtro bucket attivo
+  const note = $('#indiv-filter-note');
+  if (state.indivBucket){
+    const b = counts.find(c => c.id === state.indivBucket);
+    note.innerHTML = `<p style="margin-top:10px;font-size:12px"><span class="pill">${b.short}%</span> <a href="#" id="indiv-clear" style="color:var(--cp-link)">${t('indiv_clear')}</a></p>`;
+    $('#indiv-clear').onclick = ev => { ev.preventDefault(); state.indivBucket = null; rebuildIndividualUlb(); };
+  } else note.innerHTML = '';
+
+  // Sorgente righe con tutti i campi necessari a filtro/ordinamento
+  const allRows = all.map(u => ({
+    username: u.username,
+    license: u.quota > 0 ? u.license : '—',
+    cc: u.cc || '—',
+    quota: u.quota,
+    qty: u.qty,
+    util: utilRatio(u) * 100,
+    status: indivStatus(u),
+    bucket: bucketOf(u).id
+  }));
+
+  function renderIndivRows(){
+    let rows = allRows;
+    if (state.indivBucket) rows = rows.filter(r => r.bucket === state.indivBucket);
+    const q = (state.indivSearch || '').trim().toLowerCase();
+    if (q) rows = rows.filter(r => r.username.toLowerCase().includes(q));
+    const sc = state.sort.indiv || { col:'util', dir:'desc' };
+    rows = [...rows].sort((a, b) => {
+      const va = a[sc.col], vb = b[sc.col];
+      if (typeof va === 'number' && typeof vb === 'number') return sc.dir === 'desc' ? vb - va : va - vb;
+      return sc.dir === 'desc' ? String(vb).localeCompare(String(va)) : String(va).localeCompare(String(vb));
+    });
+    const maxUtil = Math.max(...rows.map(r => r.util), 1);
+    document.querySelector('#tbl-indiv tbody').innerHTML = rows.map(r => {
+      const tag = r.license === 'Enterprise' ? `<span class="tag ent">Enterprise</span>` : r.license === 'Business' ? `<span class="tag biz">Business</span>` : '—';
+      const badge = r.status === 'over' ? `<span class="tag st-over">${t('st_over')}</span>` : r.status === 'near' ? `<span class="tag st-near">${t('st_near')}</span>` : `<span class="tag st-ok">${t('st_ok')}</span>`;
+      return `
+        <tr>
+          <td class="bar-cell"><div class="bar" style="width:${Math.min(r.util, 100)}%"></div><span>${escapeHtml(r.username)}</span></td>
+          <td>${tag}</td>
+          <td>${escapeHtml(r.cc)}</td>
+          <td class="num">${fmtCr(r.quota)}</td>
+          <td class="num">${fmtCr(r.qty)}</td>
+          <td class="num">${fmtPct(r.util)}</td>
+          <td>${badge}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  renderIndivRows();
+
+  // Ricerca: aggiorna solo il corpo della tabella (mantiene il focus)
+  const searchEl = $('#indiv-search');
+  searchEl.value = state.indivSearch || '';
+  searchEl.oninput = () => { state.indivSearch = searchEl.value; renderIndivRows(); };
+
+  // Ordinamento colonne
+  document.querySelectorAll('#tbl-indiv thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col; if (!col) return;
+      const cur = state.sort.indiv || { col:'util', dir:'desc' };
+      const dir = (cur.col === col && cur.dir === 'desc') ? 'asc' : 'desc';
+      state.sort.indiv = { col, dir };
+      renderIndivRows();
+    });
+  });
+}
+
+// ============================================================
+// Budget & Forecast — porting di projection.ts + DashboardPage (xrvk/ubb-dashboard)
+// Proiezione di fine mese sul burn-rate giornaliero del periodo coperto dal CSV.
+// ============================================================
+function monthProgress(){
+  const dm = state.lastAgg && state.lastAgg.summary ? state.lastAgg.summary.date_max : null;
+  let now;
+  if (dm && /^\d{4}-\d{2}-\d{2}$/.test(dm)) { const p = dm.split('-').map(Number); now = new Date(p[0], p[1]-1, p[2]); }
+  else now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  const dayOfMonth = now.getDate();
+  return { year: now.getFullYear(), month: now.getMonth()+1, daysInMonth, dayOfMonth,
+    daysElapsed: Math.max(1, dayOfMonth), daysRemaining: Math.max(0, daysInMonth - dayOfMonth),
+    lowConfidence: dayOfMonth < 5 };
+}
+
+// projectMonthlyBudget(consumed): proiezione lineare a fine mese (now = data massima del CSV)
+function projectValue(consumed){
+  const mp = monthProgress();
+  const safe = Number.isFinite(consumed) && consumed > 0 ? consumed : 0;
+  const dailyRate = safe / mp.daysElapsed;
+  const projected = safe + dailyRate * mp.daysRemaining;
+  return { ...mp, dailyRate, projected };
+}
+
+// Forecast basato sul TREND: regressione lineare (OLS) sul consumo giornaliero
+// di tutti i giorni disponibili nel mese corrente del CSV, estesa fino a fine mese.
+// I giorni senza consumo contano come 0 (giorni a spesa nulla reali). Fallback alla
+// media giornaliera quando i dati sono troppo scarsi (< 2 giorni con consumo > 0).
+function trendForecast(){
+  const mp = monthProgress();
+  const agg = state.lastAgg;
+  const dm = agg && agg.summary ? agg.summary.date_max : null;
+  const monthKey = (dm && /^\d{4}-\d{2}-\d{2}$/.test(dm)) ? dm.slice(0,7) : null;
+
+  // Serie giornaliera (USD) per il mese di date_max: giorni 1..dayOfMonth, 0 dove manca
+  const byDay = new Map();
+  if (monthKey && agg.by_date) for (const d of agg.by_date) {
+    if (d.date.startsWith(monthKey + '-')) { const day = Number(d.date.slice(8,10)); byDay.set(day, (byDay.get(day) || 0) + d.gross_amount); }
+  }
+  const xs = [], ys = [];
+  let consumedCost = 0, nonZero = 0;
+  for (let day = 1; day <= mp.dayOfMonth; day++) { const v = byDay.get(day) || 0; xs.push(day); ys.push(v); consumedCost += v; if (v > 0) nonZero++; }
+
+  // Regressione OLS: consumo_giornaliero ≈ slope·giorno + intercept
+  let slope = 0, intercept = 0, useTrend = false;
+  if (mp.dayOfMonth >= 2 && nonZero >= 2) {
+    const n = xs.length;
+    const mx = xs.reduce((s,v)=>s+v,0)/n, my = ys.reduce((s,v)=>s+v,0)/n;
+    let sxx = 0, sxy = 0;
+    for (let i=0;i<n;i++){ const dx = xs[i]-mx; sxx += dx*dx; sxy += dx*(ys[i]-my); }
+    if (sxx > 0) { slope = sxy/sxx; intercept = my - slope*mx; useTrend = true; }
+  }
+  const avgRate = mp.daysElapsed > 0 ? consumedCost / mp.daysElapsed : 0;
+  // Consumo giornaliero proiettato per i giorni futuri (clamp >= 0)
+  const futureDaily = day => useTrend ? Math.max(0, slope*day + intercept) : avgRate;
+
+  // Proiezione cumulata a fine mese (USD)
+  let projectedCost = consumedCost;
+  for (let day = mp.dayOfMonth + 1; day <= mp.daysInMonth; day++) projectedCost += futureDaily(day);
+  if (!useTrend) projectedCost = consumedCost + avgRate * mp.daysRemaining;
+
+  const growthRatio = consumedCost > 0 ? projectedCost / consumedCost : (mp.daysElapsed > 0 ? mp.daysInMonth / mp.daysElapsed : 1);
+  return { ...mp, useTrend, slope, intercept, avgRate, futureDaily, consumedCost, projectedCost, growthRatio };
+}
+
+function rebuildBudgetForecast(){
+  const agg = computeAgg();
+  const panel = $('#panel-budget');
+  if (!agg || !agg.summary){ panel.innerHTML = `<div class="card"><div class="notice">${t('bf_no_data')}</div></div>`; return; }
+  const s = agg.summary;
+  const P = state.promo ? (agg.poolPromo || agg.pool) : agg.pool;
+  const CREDIT = 0.01;
+  const mp = monthProgress();
+  const F = trendForecast();
+
+  const totalCost = s.total_cost;
+  const projTotal = totalCost * F.growthRatio;
+  const poolCredits = P ? P.pool_credits : 0;
+  const poolUSD = P ? P.pool_usd : 0;
+  const consumedCredits = P ? P.consumed_credits : s.total_qty;
+  const consumedUSD = P ? P.consumed_usd : totalCost;
+  const projCredits = consumedCredits * F.growthRatio;
+  const overCredits = Math.max(0, projCredits - poolCredits);
+  const overUSD = overCredits * CREDIT;
+  const overNow = Math.max(0, consumedCredits - poolCredits);
+  const poolRemaining = Math.max(0, poolUSD - consumedUSD);
+  const utilPct = poolCredits > 0 ? consumedCredits / poolCredits * 100 : 0;
+
+  // Utenti a rischio: proiezione vs quota mensile
+  const risk = [];
+  let alreadyOver = 0, projOverN = 0;
+  for (const u of (agg.users_detail || [])) {
+    if (u.quota <= 0) continue;
+    const projU = u.qty * F.growthRatio;
+    const rate = F.daysElapsed > 0 ? u.qty / F.daysElapsed : 0;
+    const ao = u.qty >= u.quota;
+    const po = !ao && projU > u.quota;
+    if (ao) alreadyOver++;
+    if (po) projOverN++;
+    if (ao || po) risk.push({ username: u.username, qty: u.qty, rate, projected: projU, quota: u.quota, status: ao ? 'over' : 'proj' });
+  }
+  risk.sort((a,b) => b.projected - a.projected);
+
+  panel.innerHTML = `
+    <div class="section-head"><h2>${t('bf_title')}</h2><p>${t('bf_subtitle')}</p></div>
+    <div class="notice">${t('bf_note')}</div>
+    ${mp.lowConfidence ? `<div class="notice">${t('bf_lowconf')}</div>` : ''}
+
+    <div class="kpis">
+      <div class="card kpi"><div class="label">${t('bf_kpi_mtd')}</div><div class="value">${fmtSpend(totalCost)}</div><div class="sub">${L().bf_kpi_mtd_sub(mp.dayOfMonth, mp.daysInMonth)}</div></div>
+      <div class="card kpi"><div class="label">${t('bf_kpi_eom')}</div><div class="value ${overCredits>0?'warn':''}">${fmtSpend(projTotal)}</div><div class="sub">${overCredits>0 ? L().bf_kpi_eom_over(fmtCr(overCredits)+' cr') : t('bf_kpi_eom_within')}</div></div>
+      <div class="card kpi"><div class="label">${t('bf_kpi_pool')}</div><div class="value">${fmtUSD(poolUSD)}</div><div class="sub">${fmtCr(poolCredits)} ${t('bf_kpi_pool_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('bf_kpi_remaining')}</div><div class="value ok">${fmtUSD(poolRemaining)}</div><div class="sub">${L().bf_kpi_remaining_sub(fmtPct(utilPct))}</div></div>
+      <div class="card kpi"><div class="label">${t('bf_kpi_risk')}</div><div class="value ${(alreadyOver+projOverN)>0?'warn':'ok'}">${fmtInt(alreadyOver+projOverN)}</div><div class="sub">${L().bf_kpi_risk_sub(fmtInt(alreadyOver), fmtInt(projOverN))}</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card"><h2>${t('bf_burnup_title')}</h2><div class="chart-box tall"><canvas id="chart-bf-burn"></canvas></div>
+        <div class="legend-inline">
+          <span><i style="background:var(--cp-accent)"></i> ${t('bf_legend_actual')}</span>
+          <span><i style="background:#f59e0b"></i> ${t('bf_legend_proj')}</span>
+          <span><i style="background:#16a34a"></i> ${t('bf_legend_pool')}</span>
+        </div>
+      </div>
+      <div class="card"><h2>${t('bf_pool_draw_title')}</h2>
+        <div class="meter" id="bf-meter" style="margin-top:8px"></div>
+        <div class="meter-foot" id="bf-meter-foot" style="margin-top:14px"></div>
+      </div>
+    </div>
+
+    <div class="card"><h2>${t('bf_risk_title')}</h2>
+      ${risk.length ? `<div class="scroll"><table id="tbl-bf-risk">
+        <thead><tr>
+          <th>${t('th_user')}</th><th class="num">${t('bf_th_mtd')}</th><th class="num">${t('bf_th_rate')}</th>
+          <th class="num">${t('bf_th_proj')}</th><th class="num">${t('th_quota')}</th><th>${t('bf_th_status')}</th>
+        </tr></thead><tbody></tbody>
+      </table></div>` : `<div class="notice">${t('bf_risk_none')}</div>`}
+    </div>
+  `;
+
+  const C = themeColors();
+
+  // Burn-up: spesa cumulata + proiezione + ceiling del pool (mese di date_max)
+  const labels = [], actual = [], projected = [], ceiling = [];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s.date_max)) {
+    const yy = s.date_max.slice(0,4), mm = s.date_max.slice(5,7);
+    const costByDay = new Map();
+    for (const d of agg.by_date) { if (d.date.startsWith(`${yy}-${mm}-`)) costByDay.set(Number(d.date.slice(8,10)), d.gross_amount); }
+    let cum = 0;
+    for (let day = 1; day <= mp.daysInMonth; day++) {
+      labels.push(String(day));
+      if (day <= mp.dayOfMonth) { cum += (costByDay.get(day) || 0); actual.push(round(cum,2)); }
+      else actual.push(null);
+      projected.push(null);
+      ceiling.push(round(poolUSD,2));
+    }
+    const baseCum = cum;
+    projected[mp.dayOfMonth-1] = round(baseCum, 2);
+    let pc = baseCum;
+    for (let day = mp.dayOfMonth + 1; day <= mp.daysInMonth; day++) { pc += F.futureDaily(day); projected[day-1] = round(pc, 2); }
+  }
+  state.charts.bfBurn = new Chart($('#chart-bf-burn'), {
+    data: {
+      labels,
+      datasets: [
+        { type:'line', label: t('bf_legend_actual'), data: actual, borderColor: C.accent, backgroundColor: hexA(C.accent, 0.12), fill: true, tension: 0.15, pointRadius: 0, borderWidth: 2, order: 2 },
+        { type:'line', label: t('bf_legend_proj'), data: projected, borderColor: '#f59e0b', borderDash: [6,4], pointRadius: 0, borderWidth: 2, order: 1, spanGaps: true },
+        { type:'line', label: t('bf_legend_pool'), data: ceiling, borderColor: '#16a34a', borderDash: [3,3], pointRadius: 0, borderWidth: 1.5, order: 0 }
+      ]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.parsed.y == null ? null : (ctx.datasetIndex === 2 ? ` ${ctx.dataset.label}: ${fmtUSD(ctx.parsed.y)}` : ` ${ctx.dataset.label}: ${fmtSpend(ctx.parsed.y)}`) } }
+      },
+      scales: { x: { grid: { display: false }, title: { display: true, text: t('bf_burnup_x'), color: C.muted } }, y: { ticks: { callback: v => fmtUSD(v) }, grid: { color: C.border } } }
+    }
+  });
+
+  // Meter di drawdown (consumo vs pool)
+  const scaleMax = Math.max(consumedCredits, poolCredits) || 1;
+  const poolW = poolCredits / scaleMax * 100;
+  const overW = overNow / scaleMax * 100;
+  const usedW = Math.min(consumedCredits, poolCredits) / scaleMax * 100;
+  const freeW = Math.max(0, poolCredits - consumedCredits) / scaleMax * 100;
+  const meter = $('#bf-meter');
+  if (meter) {
+    if (overNow > 0) {
+      meter.innerHTML =
+        `<div class="seg seg-pool" style="width:${poolW}%">Pool ${fmtCr(poolCredits)}</div>` +
+        `<div class="seg seg-over" style="width:${overW}%">${L().seg_over(fmtCr(overNow))}</div>` +
+        `<div class="meter-marker" style="left:${poolW}%"><span>${t('meter_limit')}</span></div>`;
+    } else {
+      meter.innerHTML =
+        `<div class="seg seg-pool" style="width:${usedW}%">${L().seg_consumed(fmtCr(consumedCredits))}</div>` +
+        `<div class="seg seg-free" style="width:${freeW}%">${L().seg_free(fmtCr(Math.max(0, poolCredits - consumedCredits)))}</div>`;
+    }
+    let foot = `<span>${t('foot_pool')} <b>${fmtUSD(poolUSD)}</b> · ${fmtCr(poolCredits)} cr</span>` +
+               `<span>${t('foot_cons')} <b>${fmtUSD(consumedUSD)}</b> · ${fmtCr(consumedCredits)} cr</span>`;
+    foot += overNow > 0
+      ? `<span class="over">${L().foot_over(fmtCr(overNow), (utilPct-100).toFixed(1), fmtUSD(overNow*CREDIT))}</span>`
+      : `<span>${L().foot_margin(fmtCr(Math.max(0, poolCredits - consumedCredits)))}</span>`;
+    $('#bf-meter-foot').innerHTML = foot;
+  }
+
+  // Tabella utenti a rischio
+  if (risk.length) {
+    const maxProj = Math.max(...risk.map(r => r.projected), 1);
+    document.querySelector('#tbl-bf-risk tbody').innerHTML = risk.map(r => {
+      const badge = r.status === 'over' ? `<span class="tag st-over">${t('bf_status_over')}</span>` : `<span class="tag st-proj">${t('bf_status_proj')}</span>`;
+      return `
+        <tr>
+          <td class="bar-cell"><div class="bar" style="width:${r.projected/maxProj*100}%"></div><span>${escapeHtml(r.username)}</span></td>
+          <td class="num">${fmtCr(r.qty)}</td>
+          <td class="num">${fmtCr(r.rate)}</td>
+          <td class="num">${fmtCr(r.projected)}</td>
+          <td class="num">${fmtCr(r.quota)}</td>
+          <td>${badge}</td>
+        </tr>`;
+    }).join('');
+  }
+}
+
+// ============================================================
+// Organization Budget — riadattamento di Enterprise Budget (BudgetPlanner)
+// al livello di organizzazione, secondo le regole di billing GitHub:
+// il budget org limita le spese metered (oltre il pool) degli utenti dell'org.
+// ============================================================
+function computeOrgBudgets(){
+  const CREDIT = 0.01;
+  const buffer = (state.orgBuffer ?? 0) / 100;
+  const promoBiz = state.promo ? 1100 : 0;
+  const promoEnt = state.promo ? 3100 : 0;
+  const F = trendForecast();
+  return (state.lastAgg.org_detail || []).map(o => {
+    const poolCredits = o.pool_credits + o.n_business * promoBiz + o.n_enterprise * promoEnt;
+    const consumed = o.qty;
+    const projectedCredits = consumed * F.growthRatio;
+    const overageProj = Math.max(0, projectedCredits - poolCredits);
+    const recommended = Math.ceil(overageProj * CREDIT * (1 + buffer));
+    const util = poolCredits > 0 ? consumed / poolCredits * 100 : (consumed > 0 ? Infinity : 0);
+    const status = (poolCredits > 0 && consumed >= poolCredits) || (poolCredits === 0 && consumed > 0) ? 'over'
+                 : (projectedCredits > poolCredits) ? 'proj' : 'ok';
+    return {
+      org: o.org, seats: o.users, nBiz: o.n_business, nEnt: o.n_enterprise,
+      poolCredits, poolUSD: poolCredits * CREDIT, consumed, consumedUSD: consumed * CREDIT,
+      projectedCredits, projectedUSD: projectedCredits * CREDIT,
+      overageProj: round(overageProj, 2), overageUSD: overageProj * CREDIT, recommended, util, status
+    };
+  });
+}
+
+function rebuildOrgBudget(){
+  const agg = computeAgg();
+  const panel = $('#panel-org');
+  if (!agg.org_detail || !agg.org_detail.length){ panel.innerHTML = `<div class="card"><div class="notice">${t('org_no_data')}</div></div>`; return; }
+
+  const rows = computeOrgBudgets();
+  let totPool = 0, totCons = 0, totBudget = 0, needN = 0;
+  for (const r of rows){ totPool += r.poolUSD; totCons += r.consumedUSD; totBudget += r.recommended; if (r.overageProj > 0) needN++; }
+
+  panel.innerHTML = `
+    <div class="section-head"><h2>${t('org_title')}</h2><p>${t('org_subtitle')}</p></div>
+
+    <div class="card docs-ref">
+      <b>${t('org_ref_title')}</b>
+      <div style="margin-top:6px">${t('org_ref_credit')}</div>
+      <ul>
+        <li>${t('org_ref_biz')}</li>
+        <li>${t('org_ref_ent')}</li>
+        <li>${t('org_ref_flow')}</li>
+        <li>${t('org_ref_levels')}</li>
+        <li>${t('org_ref_hardstop')}</li>
+        <li>${t('org_ref_restrict')}</li>
+        <li>${t('org_ref_multiorg')}</li>
+        <li>${t('org_ref_nottotal')}</li>
+      </ul>
+      <div style="margin-top:8px"><a href="https://docs.github.com/en/copilot/concepts/billing/budgets-for-usage-based-billing" target="_blank" rel="noopener noreferrer">${t('org_ref_link')}</a></div>
+    </div>
+
+    <div class="card lic-input-card">
+      <div class="lic-input-head"><b>${t('org_buffer_label')}</b><span>${t('org_buffer_hint')}</span></div>
+      <div class="lic-input-fields">
+        <label class="org-buffer">${t('org_buffer_label')} <span class="num-field"><input type="number" id="org-buffer-input" min="0" max="100" step="1"><span class="pct">%</span></span></label>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="card kpi"><div class="label">${t('org_kpi_orgs')}</div><div class="value">${fmtInt(rows.length)}</div><div class="sub">${t('org_kpi_orgs_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('org_kpi_pool')}</div><div class="value">${fmtUSD(totPool)}</div><div class="sub">${t('org_kpi_pool_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('org_kpi_consumed')}</div><div class="value">${fmtUSD(totCons)}</div><div class="sub">${t('org_kpi_consumed_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('org_kpi_budget')}</div><div class="value ${totBudget>0?'warn':'ok'}">${fmtUSD(totBudget)}</div><div class="sub">${t('org_kpi_budget_sub')}</div></div>
+      <div class="card kpi"><div class="label">${t('org_kpi_need')}</div><div class="value ${needN>0?'warn':'ok'}">${fmtInt(needN)}</div><div class="sub">${t('org_kpi_need_sub')}</div></div>
+    </div>
+
+    <div class="card"><h2>${t('org_chart_title')}</h2><div class="chart-box tall"><canvas id="chart-org-budget"></canvas></div></div>
+
+    <div class="card"><h2>${t('org_table_title')}</h2>
+      <div class="scroll"><table id="tbl-org">
+        <thead><tr>
+          <th data-col="org">${t('org_th_org')}</th>
+          <th class="num" data-col="seats">${t('org_th_seats')}</th>
+          <th class="num" data-col="poolUSD">${t('org_th_pool')}</th>
+          <th class="num" data-col="consumedUSD">${t('org_th_consumed')}</th>
+          <th class="num" data-col="projectedUSD">${t('org_th_proj')}</th>
+          <th class="num" data-col="util">${t('org_th_util')}</th>
+          <th class="num" data-col="overageProj">${t('org_th_overage')}</th>
+          <th class="num" data-col="recommended">${t('org_th_budget')}</th>
+          <th data-col="status">${t('org_th_status')}</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  `;
+
+  const C = themeColors();
+
+  const bufIn = $('#org-buffer-input');
+  bufIn.value = state.orgBuffer;
+  bufIn.onchange = () => { let v = parseFloat(String(bufIn.value).replace(',', '.')); if (!Number.isFinite(v) || v < 0) v = 0; v = Math.min(100, v); state.orgBuffer = v; rebuildOrgBudget(); };
+
+  // Grafico: pool incluso vs spesa proiettata per organizzazione
+  state.charts.orgBudget = new Chart($('#chart-org-budget'), {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.org),
+      datasets: [
+        { label: t('org_legend_pool'), data: rows.map(r => round(r.poolUSD,2)), backgroundColor: '#16a34a', borderRadius: 4 },
+        { label: t('org_legend_proj'), data: rows.map(r => round(r.projectedUSD,2)), backgroundColor: C.accent, borderRadius: 4 }
+      ]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 }, color: C.text } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtUSD(ctx.parsed.y)}` } }
+      },
+      scales: { x: { grid: { display: false } }, y: { ticks: { callback: v => fmtUSD(v) }, grid: { color: C.border } } }
+    }
+  });
+
+  function renderOrgRows(){
+    const sc = state.sort.org || { col: 'recommended', dir: 'desc' };
+    const sorted = [...rows].sort((a, b) => {
+      const va = a[sc.col], vb = b[sc.col];
+      if (typeof va === 'number' && typeof vb === 'number') return sc.dir === 'desc' ? vb - va : va - vb;
+      return sc.dir === 'desc' ? String(vb).localeCompare(String(va)) : String(va).localeCompare(String(vb));
+    });
+    const maxBud = Math.max(...sorted.map(r => r.recommended), 1);
+    document.querySelector('#tbl-org tbody').innerHTML = sorted.map(r => {
+      const badge = r.status === 'over' ? `<span class="tag st-over">${t('org_status_over')}</span>`
+                  : r.status === 'proj' ? `<span class="tag st-proj">${t('org_status_proj')}</span>`
+                  : `<span class="tag st-ok">${t('org_status_ok')}</span>`;
+      const utilTxt = r.util === Infinity ? '∞' : fmtPct(r.util);
+      return `
+        <tr>
+          <td class="bar-cell"><div class="bar" style="width:${r.recommended/maxBud*100}%"></div><span>${escapeHtml(r.org)}</span></td>
+          <td class="num">${fmtInt(r.seats)}</td>
+          <td class="num">${fmtUSD(r.poolUSD)}</td>
+          <td class="num">${fmtUSD(r.consumedUSD)}</td>
+          <td class="num">${fmtUSD(r.projectedUSD)}</td>
+          <td class="num">${utilTxt}</td>
+          <td class="num">${fmtCr(r.overageProj)}</td>
+          <td class="num">${fmtUSD(r.recommended)}</td>
+          <td>${badge}</td>
+        </tr>`;
+    }).join('');
+  }
+  renderOrgRows();
+
+  document.querySelectorAll('#tbl-org thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col; if (!col) return;
+      const cur = state.sort.org || { col: 'recommended', dir: 'desc' };
+      const dir = (cur.col === col && cur.dir === 'desc') ? 'asc' : 'desc';
+      state.sort.org = { col, dir };
+      renderOrgRows();
+    });
+  });
 }
 </script>
 </body>
