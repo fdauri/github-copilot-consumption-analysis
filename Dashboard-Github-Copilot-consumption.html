@@ -155,6 +155,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .meter-stat .big { font-size:40px; font-weight:700; line-height:1; color:var(--cp-danger); }
 .meter-stat .big.ok { color:var(--cp-success); }
 .meter-stat .lbl { font-size:12px; color:var(--cp-text-muted); margin-top:4px; }
+.meter-left { display:flex; flex-direction:column; }
+.meter-util-total { font-size:14px; color:var(--cp-text-muted); }
+.meter-util-total b { font-size:22px; font-weight:600; color:var(--cp-text); margin-right:6px; }
 .meter-foot { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:18px; font-size:12px; color:var(--cp-text-muted); margin-top:2px; }
 .meter-foot b { color:var(--cp-text); }
 .meter-foot .over b { color:var(--cp-danger); }
@@ -326,7 +329,7 @@ const T = {
     pool_total:'Pool totale licenze', pool_consumed:'Crediti consumati',
     pool_util:'Utilizzo del pool', pool_util_sub:'consumo / pool disponibile',
     pool_over:'Crediti oltre il pool', pool_users_split:'Utenti: oltre vs entro la quota',
-    over_quota:'oltre la quota', within_quota:'entro la quota', meter_lbl:'del pool consumato',
+    over_quota:'oltre la quota', within_quota:'entro la quota', meter_lbl:'oltre il pool', meter_lbl_total:'del pool consumato',
     card_pool_cap:'Pool disponibile vs consumo reale',
     legend_within_own:'Entro la propria quota',
     legend_from_surplus:'Da surplus del pool (crediti altrui inutilizzati)',
@@ -381,7 +384,7 @@ const T = {
     pool_total:'Total license pool', pool_consumed:'Consumed credits',
     pool_util:'Pool utilization', pool_util_sub:'consumption / available pool',
     pool_over:'Credits beyond the pool', pool_users_split:'Users: over vs within quota',
-    over_quota:'over quota', within_quota:'within quota', meter_lbl:'of pool consumed',
+    over_quota:'over quota', within_quota:'within quota', meter_lbl:'beyond the pool', meter_lbl_total:'of pool consumed',
     card_pool_cap:'Available pool vs actual consumption',
     legend_within_own:'Within own quota',
     legend_from_surplus:"From pool surplus (others' unused credits)",
@@ -921,7 +924,10 @@ function rebuildDashboard(){
     </div>
 
     <div class="card meter-card">
-      <div class="meter-head" id="meter-head"></div>
+      <div class="meter-left">
+        <div class="meter-head" id="meter-head"></div>
+        <div class="meter-util-total"><b id="meter-util-total"></b> ${t('meter_lbl_total')}</div>
+      </div>
       <div class="meter-stat">
         <div class="big" id="meter-util"></div>
         <div class="lbl">${t('meter_lbl')}</div>
@@ -1180,8 +1186,9 @@ function renderPool(P, C){
 
     $('#meter-head').innerHTML = L().meter_head(fmtCr(consumed), fmtCr(pool));
     const u = $('#meter-util');
-    u.textContent = fmtPct(P.utilization_pct);
+    u.textContent = fmtPct(over ? (overage / pool) * 100 : 0);
     if (!over) u.classList.add('ok');
+    $('#meter-util-total').textContent = fmtPct(P.utilization_pct);
 
     const bar = $('#meter-bar');
     if (over) {
