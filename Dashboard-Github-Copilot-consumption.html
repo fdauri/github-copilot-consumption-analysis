@@ -464,8 +464,8 @@ const T = {
     org_no_data:'Nessuna organizzazione rilevata. Carica CSV con nome file per organizzazione (es. AIUsageReport_<Org>\u2026).',
     org_ref_title:'Regole di billing (documentazione GitHub)',
     org_ref_credit:'1 AI credit = $0,01 USD. Allowance inclusa per licenza al mese:',
-    org_ref_biz:'Copilot Business: 1.900 crediti (3.000 in promo Giu–Set 2026)',
-    org_ref_ent:'Copilot Enterprise: 3.900 crediti (7.000 in promo Giu–Set 2026)',
+    org_ref_biz:'Copilot Business: 1.900 crediti (3.000 in promo Giu–Ago 2026)',
+    org_ref_ent:'Copilot Enterprise: 3.900 crediti (7.000 in promo Giu–Ago 2026)',
     org_ref_levels:'Il budget di organizzazione limita le spese metered degli utenti fatturati all\u2019org, dopo l\u2019esaurimento del pool condiviso. Livelli: utente \u00b7 cost center \u00b7 organizzazione \u00b7 enterprise.',
     ulb_note:'L’ULB universale è il default applicato a tutti gli utenti licenziati; gli ULB individuali lo sovrascrivono per i power user. È l’unico controllo attivo sia nella fase pool sia in quella metered ed è sempre un hard stop (un budget di $0 blocca subito l’utente).',
     indiv_note:'Il CSV non contiene gli ULB configurati: come riferimento si usa l’allowance mensile inclusa (contributo al pool). Un ULB reale può essere impostato più alto o più basso della quota inclusa ed è un hard stop attivo sia nella fase pool sia in quella metered.',
@@ -596,8 +596,8 @@ const T = {
     org_no_data:'No organization detected. Upload CSVs with a per-organization file name (e.g. AIUsageReport_<Org>\u2026).',
     org_ref_title:'Billing rules (GitHub documentation)',
     org_ref_credit:'1 AI credit = $0.01 USD. Included allowance per license per month:',
-    org_ref_biz:'Copilot Business: 1,900 credits (3,000 during the Jun–Sep 2026 promo)',
-    org_ref_ent:'Copilot Enterprise: 3,900 credits (7,000 during the Jun–Sep 2026 promo)',
+    org_ref_biz:'Copilot Business: 1,900 credits (3,000 during the Jun–Aug 2026 promo)',
+    org_ref_ent:'Copilot Enterprise: 3,900 credits (7,000 during the Jun–Aug 2026 promo)',
     org_ref_levels:'The organization budget caps metered charges for users billed to the org, after the shared pool is exhausted. Levels: user \u00b7 cost center \u00b7 organization \u00b7 enterprise.',
     ulb_note:'The universal ULB is the default applied to every licensed user; individual ULBs override it for power users. It is the only control active in both the pool and metered phases and is always a hard stop (a $0 budget blocks the user immediately).',
     indiv_note:'The CSV does not contain configured ULBs: the included monthly allowance (pool contribution) is used as the reference. A real ULB can be set higher or lower than the included quota and is a hard stop active in both the pool and metered phases.',
@@ -894,9 +894,10 @@ function aggregate(rows){
   })).sort((a,b) => b.cost - a.cost);
 
   const licOfQuota = q => q >= 3900 ? 'Enterprise' : 'Business';
+  const effectiveQuota = q => q > 0 && state.promo ? Math.max(q, q >= 3900 ? 7000 : 3000) : q;
   const userDetailArr = [...byUser.entries()].map(([k,v]) => ({
     username:k, cost: round(v.cost,4), qty: round(v.qty,2), models: v.models.size,
-    quota: v.quota, license: licOfQuota(v.quota), cc: v.cc
+    quota: effectiveQuota(v.quota), license: licOfQuota(v.quota), cc: v.cc
   })).sort((a,b) => b.qty - a.qty);
 
   const orgArr = [...byOrgFile.entries()].map(([k,v]) => ({org_file:k, gross_amount: round(v,4)}))
@@ -1219,6 +1220,7 @@ function rebuildDashboard(){
   // Charts
   const modelLabels = agg.by_model.map(r => r.model_base);
   const modelCosts  = agg.by_model.map(r => r.cost);
+  $('#chart-model').parentElement.style.height = `${Math.max(320, modelLabels.length * 24)}px`;
 
   state.charts.model = new Chart($('#chart-model'), {
     type:'bar',
@@ -1226,7 +1228,7 @@ function rebuildDashboard(){
     options:{
       indexAxis:'y', maintainAspectRatio:false,
       plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ' ' + fmtSpend(ctx.parsed.x) }}},
-      scales:{ x:{ ticks:{ callback:v=>fmtSpend(v) }, grid:{color:C.border} }, y:{ grid:{display:false} } }
+      scales:{ x:{ ticks:{ callback:v=>fmtSpend(v) }, grid:{color:C.border} }, y:{ ticks:{autoSkip:false}, grid:{display:false} } }
     }
   });
 

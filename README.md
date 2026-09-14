@@ -69,7 +69,7 @@ Activated automatically when quota data is present in the CSV.
 | **Language** | Toggle between Italian (IT) and English (EN). All labels, tooltips, and dynamic strings update immediately. |
 | **Number format** | Switch between US format (`1,234.56`) and EU format (`1.234,56`) for all numeric values. |
 | **Discount** | Enable and set a percentage discount (0–100 %) applied to all USD monetary values. |
-| **Jun–Aug Promo** | Simulate the June–August promotional bonus (+1,100 credits per Business licence, +3,100 per Enterprise). Expands the pool and recalculates spend accordingly. |
+| **Jun–Aug Promo** | Simulate the June–August promotional bonus (+1,100 credits per Business licence, +3,100 per Enterprise). Expands the pool and recalculates individual quota references and spend accordingly. |
 
 ### Export
 - **Export aggregated data (JSON)** — downloads a `dashboard_data.json` file containing all computed aggregations (summary, by-model, by-date, by-user, by-cost-center, pool analysis).
